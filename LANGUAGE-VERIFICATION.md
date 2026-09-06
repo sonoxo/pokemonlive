@@ -1,0 +1,21 @@
+# 中／英／日语言切换验证
+
+日期：2026-09-06。
+
+## 覆盖
+
+- 顶部原生语言选择器、键盘操作、偏好保存及 HTML lang/title。
+- 全部现有物种、招式、道具、状态和属性；菜单、日志、规则、分镜展示摘要。原始 JSON 和模型提示词明确保留源文。
+- 不修改中文战斗事实；演出期间锁定语言，回合间切换不重置 HP、状态、PP 或回合数。
+- MiniMax 喊招按语言切换台词、voice_id 与 language_boost。英文 English_Trustworthy_Man，日文 Japanese_OptimisticYouth，中文保持现有率真弟弟。音色 ID 已核对官方列表：<https://platform.minimaxi.com/docs/faq/system-voice-id>。
+- fal 首段／续段及所有场景生成使用所选语言约束，保留原有异常状态、无对白及不能应答的限制。各语言缓存分离，中文旧缓存键和同 requestId 失败恢复兼容。
+
+## 证据与边界
+
+- `npm test`：273/273 通过，日志 `.local/language-tests.txt`。
+- 独立子 agent 审查最终 PASS；先前发现的类型缩写残留、分镜标签未翻译、状态招式错误显示 ×null 问题均修复并增加回归。
+- 使用 `.local/recovery-replay.mjs` 的 `LANGUAGE_QA=1` 隔离运行在 4194，网络请求全部模拟，不读取或使用真实上游密钥，不额外购买视频／语音。
+- 浏览器完成日语十万伏特和英文铁尾回合，并回到待机；观察到语言锁定、血量、PP 和回合推进。之前英文电磁波回合后切日语，TURN 02、80/110 HP、对方麻痹均保留。
+- 页面刷新保持所选日语；英日请求实测为 `ピカチュウ、10まんボルト！` / `Pikachu, use Iron Tail!` 及对应音色参数。所有模拟 fal 提交都记录所选语言；日志 `.local/language-browser-log.txt`，隔离运行的 `network.jsonl` 保留在 `.local/recovery-replay-*`。
+- 浏览器截图检查桌面顶部、状态卡、招式面板和分镜详情；英文招式效果允许换行，避免隐藏属性倍率。未扩大手机布局范围。
+- 模拟回放视频和 MP3 为既有本地素材，仅验证请求／缓存／播放链路。没有声称新生成英日视频的发音、音质或模型服从性已经付费实测。

@@ -1,0 +1,19 @@
+{
+  "model": "minimax/h3-max/reference-to-video",
+  "requestId": "01a0707b-2db3-7742-a9be-ce9c83aa4cee",
+  "startedAt": 1788593515027,
+  "references": [
+    "assets/backgrounds/pine-clearing-v2.png",
+    "assets/video/idle-battle-pikachu-charmander-anime-v3-first-frame.png"
+  ],
+  "prompt": "A five-second seamless calm idle animation for a 2D hand-drawn Pokemon battle, one locked low eye-level wide shot, 16:9. Image 1 is the exact environment and low camera reference: bright level grass, low grass-capped ochre rock ledges, a layered pine slightly left of center, other pines behind, rounded deciduous tree at right, blue sky. Preserve this layout and its softly painted 2D foliage; no empty rolling-hill replacement or overhead angle. Image 2 identifies the ONLY two characters and their established clean 2D cel-animation designs; do not use its old hill background. Pikachu stands in rear three-quarter view in the lower-left foreground facing the distant Charmander; keep the yellow body, black-tipped long ears, two brown back stripes, red cheek and lightning-shaped tail. Charmander is a smaller ORANGE bipedal earless lizard in right middle distance facing left, cream belly, smooth orange tail with a flame. Never exchange their features. Ground Pikachu's feet near 22% width and 91% height, its ear tips near 42% height. Ground Charmander's feet near 75% width and 61% height, its head near 33% height. Keep both fully visible. Upper-left and lower-right areas remain empty of characters for later HTML panels, but do not draw panels. Clear diagonal space between the two. Only tiny cyclic breathing, a restrained ear twitch, soft tail-flame flicker and slight grass movement. No steps, turning around, attacks, injuries, energy, moving camera, zooms or cuts. Finish in exactly the initial poses, drawing scale, background and framing for looping. Faithful flat cel colors, clean dark ink, two-tone shadows, hand-painted backdrop, bright outdoor daylight. No 3D, CGI, pixel grid, plastic, morphing, additional creatures, people, text, UI, logos or watermark. Quiet outdoor ambience, no music or speech.",
+  "durationSeconds": 5,
+  "resolution": "768P",
+  "status": "downloaded",
+  "completedAt": 1788593529039,
+  "elapsedMs": 14012,
+  "timings": {
+    "inference": 4.06761242900393
+  },
+  "output": "pine-idle-v1.mp4"
+}

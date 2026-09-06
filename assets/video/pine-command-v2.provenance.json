@@ -1,0 +1,18 @@
+{
+  "model": "minimax/h3-max-turbo/image-to-video",
+  "requestId": "01a0707e-f86e-7263-b298-f242b9c9e064",
+  "startedAt": 1788593763642,
+  "references": [
+    "assets/video/pine-idle-v2-loop-first-frame.png"
+  ],
+  "prompt": "A five-second neutral command-and-reaction shot in this exact hand-drawn 2D pine-clearing battle scene. Start on the supplied wide frame. At 0.4 seconds cut to a lively three-quarter close-up of Pikachu listening: ears perk once, eyes focus, one subtle ready crouch. At 2.4 seconds cut back to the original low wide shot. From 3.3 seconds hold both original neutral ready poses with tiny breathing; finish exactly on the supplied end frame. The shot only anticipates the next command. No electricity, attack, projectile, approach, impact, injury, damage, fainting or victory. Charmander remains orange, distinct, watchful and unharmed. Either side can act first afterward. Preserve the supplied species designs, positions, flat cel shadows, pine trees, grass-capped ochre ledges, low battle viewpoint and light direction. No 3D, pixel art, humans, extra creatures, UI, words, captions, logos or morph transitions. Straight cuts; no speech or music, gentle outdoor ambience only. The app supplies the spoken command.",
+  "durationSeconds": 5,
+  "resolution": "768P",
+  "status": "downloaded",
+  "completedAt": 1788593774501,
+  "elapsedMs": 10859,
+  "timings": {
+    "inference": 1.8468126369989477
+  },
+  "output": "pine-command-v2.mp4"
+}

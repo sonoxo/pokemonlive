@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "id": "forest-clearing-concept-v1",
+  "role": "empty original 2D forest background concept for user approval",
+  "path": "assets/backgrounds/forest-clearing-concept-v1.png",
+  "status": "concept-awaiting-user-approval",
+  "created_at": "2026-09-05",
+  "source": {
+    "kind": "generated",
+    "tool": "built-in imagegen",
+    "reference_images": [],
+    "original_output": "/Users/superx/.codex/generated_images/01a06c91-3195-7d10-a483-a94620997e36/exec-ac6f2a72-4a35-4846-a4d3-8812f0b34cd2.png",
+    "prompt": "assets/backgrounds/forest-clearing-concept-v1.prompt.txt",
+    "note": "New environment-only illustration requested by user; no copyrighted characters or third-party reference images supplied. Not represented as a licensed official game background."
+  },
+  "technical": {
+    "format": "PNG",
+    "dimensions": [1672, 941],
+    "alpha": false,
+    "aspect": "approximately 16:9; unmodified generator output",
+    "sha256": "1f5e0d694269df5ecdf2c2bd985d807cb688ff5fa8f6b15d435d6aab59235a2f"
+  },
+  "verification": {
+    "image_inspected": true,
+    "technical_checks_passed": true,
+    "in_engine_reviewed": false,
+    "video_generated": false,
+    "live_page_modified": false,
+    "reviewer": "/root/review",
+    "review_result": "PASS for static concept only; user visual approval pending",
+    "integration_notes": [
+      "Keep the lower-left character above foreground grass to avoid silhouette overlap.",
+      "Place the right-side character in the bright clearing left of the tree shadow."
+    ]
+  }
+}

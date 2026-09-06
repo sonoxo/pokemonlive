@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "art_direction_brief": "assets/video/FOREST-ART-DIRECTION.md",
+  "assets": [
+    {
+      "id": "forest-idle-first-frame",
+      "role": "default anime idle poster and shared environment reference",
+      "path": "assets/video/idle-battle-pikachu-charmander-anime-forest-v4-first-frame.png",
+      "status": "blocked-no-output",
+      "generation_attempt": { "tool": "built-in imagegen", "result": "moderation_blocked", "request_id": "5add369c-3831-464f-b25a-cdd3fc858a6c", "note": "No image returned. Live page and existing videos unchanged. No subsequent fal generation submitted." },
+      "technical": { "aspect": "16:9", "alpha": false, "frames": 1, "filtering": "smooth" },
+      "visual_locks": ["anime-v3 character designs", "character positions", "camera", "cel shading", "HUD safe areas"],
+      "source": { "kind": "generated-edit", "url_or_tool": "built-in imagegen", "created_at": "2026-09-05", "reference": "assets/video/idle-battle-pikachu-charmander-anime-v3-first-frame.png", "license": "Generated project asset; Pokemon character rights are not granted", "prompt_or_source_record": "forest-image-prompt.txt" },
+      "verification": { "native_scale_reviewed": false, "in_engine_reviewed": false, "technical_checks_passed": false, "approved_by": "" }
+    },
+    { "id": "forest-idle", "role": "five-second looping idle", "path": "assets/video/idle-battle-pikachu-charmander-anime-forest-v4.mp4", "status": "planned" },
+    { "id": "forest-command-bridge", "role": "matching five-second command transition", "path": "assets/video/command-bridge-forest-v2.mp4", "status": "planned" },
+    { "id": "forest-command-tail", "role": "actual bridge tail used by server for attack continuity", "path": "assets/video/command-bridge-forest-v2-tail.jpg", "status": "planned" }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "model": "minimax/h3-max-turbo/image-to-video",
+  "requestId": "01a06f93-de98-7280-a431-226497387f29",
+  "prompt": "A five-second hand-drawn Pokémon TV anime command-and-reaction shot in this exact grassy arena. Start with the supplied wide composition: Pikachu lower-left, Charmander upper-right. At 0.3 seconds cut to a lively three-quarter close-up of Pikachu: ears perk, eyes focus, it lowers its center of gravity and listens to its offscreen trainer. At 2.5 seconds cut back to the original wide shot. From 3.5 seconds both Pokémon hold a neutral ready stance with subtle breathing; finish on the supplied end image. This is anticipation only, not an attack: no electricity, projectile, running toward the opponent, impact, injury or victory. Charmander remains watchful and unharmed. The opponent may act first next. Preserve faithful species anatomy, clean ink contours, flat cel shadows and painted background. No 3D, pixel art, UI, text, additional characters or trainers on screen. No speech or music: gentle outdoor ambience only; the application supplies the exact spoken command separately.",
+  "elapsedMs": 12576,
+  "timings": {
+    "inference": 0.5409295040008146
+  },
+  "video": "command-bridge.mp4",
+  "tail": "command-bridge-tail.jpg"
+}

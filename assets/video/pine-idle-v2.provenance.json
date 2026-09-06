@@ -1,0 +1,19 @@
+{
+  "model": "minimax/h3-max/reference-to-video",
+  "requestId": "01a0707c-a5bb-7980-9668-777f76dd7f52",
+  "startedAt": 1788593610886,
+  "references": [
+    "assets/backgrounds/pine-clearing-v2.png",
+    "assets/video/idle-battle-pikachu-charmander-anime-v3-first-frame.png"
+  ],
+  "prompt": "A five-second seamless calm idle animation for a 2D hand-drawn Pokemon battle, one locked low eye-level wide shot, 16:9. Image 1 is the exact environment and low camera reference: bright level grass, low grass-capped ochre rock ledges, a layered pine slightly left of center, other pines behind, rounded deciduous tree at right, blue sky. Preserve this layout and its softly painted 2D foliage; no empty rolling-hill replacement or overhead angle. Image 2 identifies the ONLY two characters and their established clean 2D cel-animation designs; do not use its old hill background. Pikachu stands in rear three-quarter view in the lower-left foreground facing the distant Charmander; keep the yellow body, black-tipped long ears, two brown back stripes, red cheek and lightning-shaped tail. Charmander is a smaller ORANGE bipedal earless lizard in right middle distance facing left, cream belly, smooth orange tail with a flame. Never exchange their features. CRITICAL GROUND CONTACT: both creatures stand on the SAME FLAT GRASS FLOOR in front of every tree and rock ledge. Charmander is NOT flying or jumping and NOT on a tree, bush or ledge. Its two soles visibly press into the open grass, with a dark oval contact shadow attached directly beneath the soles. Put Charmander LOWER in the image than in Image 2: feet at 73% of frame height, well below the 56% high tree-line; head around 47%. Leave visible clear grass between its shadow and the distant trees. Pikachu is MUCH larger in the foreground, feet at 93% height, ears at 35% height. Its contact shadow touches its feet. Do not copy the character positions of Image 2. Keep Pikachu left and Charmander at 70% width, a large clear diagonal battle floor between them. No graphic panels. Only tiny cyclic breathing, a restrained ear twitch, soft tail-flame flicker and slight grass movement. No steps, turning around, attacks, injuries, energy, moving camera, zooms or cuts. Finish in exactly the initial poses, drawing scale, background and framing for looping. Faithful flat cel colors, clean dark ink, two-tone shadows, hand-painted backdrop, bright outdoor daylight. No 3D, CGI, pixel grid, plastic, morphing, additional creatures, people, text, UI, logos or watermark. Quiet outdoor ambience, no music or speech.",
+  "durationSeconds": 5,
+  "resolution": "768P",
+  "status": "downloaded",
+  "completedAt": 1788593626147,
+  "elapsedMs": 15261,
+  "timings": {
+    "inference": 4.122265437996248
+  },
+  "output": "pine-idle-v2.mp4"
+}

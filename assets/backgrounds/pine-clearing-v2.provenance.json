@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "pine-clearing-v2",
+  "role": "2D pine and grass-capped rock-ledge battlefield environment",
+  "path": "assets/backgrounds/pine-clearing-v2.png",
+  "status": "integrated-desktop-reviewed",
+  "created_at": "2026-09-05",
+  "source": {
+    "tool": "built-in imagegen",
+    "reference_role": "user-supplied camera and terrain reference; no characters or UI reproduced",
+    "reference": "/var/folders/94/xmbxzqld6ws24xgxfg9ysnwc0000gn/T/codex-clipboard-4fec2c88-6e07-4e81-bc81-c53d914e4020.png",
+    "original_output": "/Users/superx/.codex/generated_images/01a06c91-3195-7d10-a483-a94620997e36/exec-f1a19d2e-3a98-40b8-acb6-7099de241969.png",
+    "prompt": "assets/backgrounds/pine-clearing-v2.prompt.txt",
+    "rights_note": "Generated project environment based on user visual reference. Not an official licensed Pokemon background; existing local prototype rights restrictions remain."
+  },
+  "visual_locks": ["low eye-level camera", "flat open clearing", "pine trees", "grass-capped ochre ledges", "hand-painted 2D rendering", "no UI or characters"],
+  "technical": {
+    "format": "PNG",
+    "dimensions": [1672, 941],
+    "alpha": false,
+    "sha256": "a6178595d5cc3d8b9c5adf11f52f76bb781e12994b4f752f7e660baa201437e1"
+  },
+  "verification": {
+    "image_inspected": true,
+    "in_engine_reviewed": true,
+    "reviewer": "review (Ampere), static background and desktop runtime screenshots",
+    "report": "assets/video/PINE-VERIFICATION.md"
+  },
+  "character_frame_attempt": {
+    "result": "moderation_blocked",
+    "request_id": "b1f43b35-1e07-4919-a51a-e840d442a799",
+    "note": "Historical static-frame attempt: no character-composited image returned. User subsequently approved background integration and separately requested new idle and command videos; see PINE-VERIFICATION.md for the later video workflow."
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-09-05T02:46:52.891Z",
+  "source": {
+    "fileName": "idle-battle-pikachu-charmander-pixel-v1-source.png",
+    "note": "Clean UI-free screenshot captured from the local pixel-2D battle stage."
+  },
+  "video": {
+    "model": "minimax/h3-max-turbo/image-to-video",
+    "requestId": "01a06f76-0c76-7a92-bf9c-9e9fbe753f92",
+    "elapsedMs": 7858,
+    "prompt": "Create a seamless five-second looping idle animation from this exact retro pixel-art creature battle screen. Preserve the exact integer pixel grid, nearest-neighbor hard edges, limited color palette, sprite scale, battle-field layout, camera, lighting, and the recognizable Pikachu back sprite and Charmander front sprite. Animate as authentic limited-frame pixel sprite animation: tiny two-frame breathing bobs, one restrained Pikachu ear twitch, and a small repeating Charmander tail-flame flicker. The grass field and sky remain almost still. Both creatures stay in their starting positions and face each other without attacking. The final frame must return exactly to the supplied first frame. No camera movement, cut, zoom, attack, impact, particles, new objects, text, user interface, health bars, logo, morphing, anatomy change, position drift, antialiasing, subpixel blur, vector smoothing, hand-painted illustration, CGI, 3D, plastic shading, or photorealism.",
+    "durationSeconds": 5,
+    "resolution": "768P",
+    "startAndEndFrame": "idle-battle-pikachu-charmander-pixel-v1-source.png",
+    "output": "idle-battle-pikachu-charmander-pixel-v1.mp4"
+  }
+}

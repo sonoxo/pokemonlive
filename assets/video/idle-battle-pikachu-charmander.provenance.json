@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-09-05T02:24:44.082Z",
+  "source": {
+    "fileName": "codex-clipboard-b1625d35-6a71-4e9d-b2df-d6f0b1e38779.png",
+    "note": "User-provided local battle screenshot; uploaded transiently to fal for the requested edit."
+  },
+  "firstFrame": {
+    "model": "fal-ai/qwen-image-edit-2511",
+    "requestId": "01a06f61-a9dd-7e70-b970-6032633e75ac",
+    "prompt": "Edit this battle-game screenshot into a clean production first frame for a looping idle animation. Preserve the exact two Pokémon identities, colors, silhouettes, proportions, scale, screen direction, and positions: Pikachu is seen from behind in the lower-left foreground, facing Charmander from the front in the middle-right distance. Preserve the circular grassy clearing, distant rounded hills, shrubs, flowers, blue sky, readable depth, and the same camera viewpoint. Redraw the entire scene as a polished hand-drawn 2D Japanese television animation frame with clean expressive line art, controlled cel shading, softly painted natural scenery, warm daylight, and restrained cinematic color. Both Pokémon are calm in neutral idle battle stances. No attack, impact, energy, particles, or dramatic action. Remove every interface overlay and reconstruct the scenery beneath it: remove the upper-left status panel, lower-right status panel, all names, HP bars, numbers, badges, borders, shadows, icons, and the upper-right 3D LIVE badge. Keep the upper-left and lower-right scenery visually calm so live HTML status panels remain readable when overlaid. No text, typography, logos, watermark, screen border, extra creatures, or trainers. Output a clean 16:9 frame.",
+    "output": "idle-battle-pikachu-charmander-first-frame.png"
+  },
+  "video": {
+    "model": "minimax/h3-max-turbo/image-to-video",
+    "requestId": "01a06f61-c7a6-7f93-bafe-be0b55e5c588",
+    "prompt": "A seamless five-second looping idle shot in polished hand-drawn 2D creature-battle television animation. Locked camera and unchanged composition. Pikachu and Charmander remain in their exact positions and neutral battle stances, facing each other without attacking. Use only subtle cyclic idle motion: gentle breathing, one small natural ear movement from Pikachu, a soft repeating sway of Charmander's tail flame, slight grass and flower movement, and barely drifting background air. Preserve character identity, anatomy, scale, colors, linework, scenery, lighting, and spatial continuity perfectly. The final frame must return exactly to the supplied first frame for a clean loop. No camera movement, cuts, zoom, dialogue, attack, impact, particles, new objects, text, UI, morphing, costume change, or position drift.",
+    "durationSeconds": 5,
+    "resolution": "768P",
+    "startAndEndFrame": "idle-battle-pikachu-charmander-first-frame.png",
+    "output": "idle-battle-pikachu-charmander.mp4"
+  }
+}

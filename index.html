@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#e74742" />
+    <meta
+      name="description"
+      content="一款可直接在浏览器游玩的宝可梦风格单打回合制战斗原型。"
+    />
+    <title>口袋对战实验室</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preload" href="assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="pixel-ui.css" />
+  </head>
+  <body>
+    <div class="page-atmosphere" aria-hidden="true">
+      <span class="orb orb-one"></span>
+      <span class="orb orb-two"></span>
+      <span class="scanlines"></span>
+    </div>
+
+    <main class="game-page">
+      <header class="site-header">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true"><i></i></span>
+          <div>
+            <p class="eyebrow">POCKET BATTLE LAB / 冒险，从这里开始</p>
+            <h1>口袋对战实验室</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <label class="language-control" for="language-select">
+            <span>语言</span>
+            <select id="language-select" aria-label="语言">
+              <option value="zh" lang="zh-CN">中文</option>
+              <option value="en" lang="en">English</option>
+              <option value="ja" lang="ja">日本語</option>
+            </select>
+          </label>
+          <button class="utility-button" id="storyboard-button" type="button">AI 分镜</button>
+          <button class="utility-button" id="rules-button" type="button">规则说明</button>
+          <button class="utility-button utility-button--accent" id="reset-button" type="button">重新对战</button>
+        </div>
+      </header>
+
+      <section class="battle-console" aria-label="宝可梦像素 2D 单打对战">
+        <div class="console-topline">
+          <div class="trainer-chip">
+            <span class="online-dot" aria-hidden="true"></span>
+            <span id="opponent-trainer">露营少年 阿岚</span>
+          </div>
+          <div class="turn-counter" id="turn-counter">TURN 01</div>
+          <div class="team-pips" id="opponent-pips" aria-label="对手队伍状态"></div>
+        </div>
+
+        <div class="battle-stage battle-stage--pine" id="battle-stage">
+          <video
+            class="idle-battle-video"
+            id="idle-battle-video"
+            src="assets/video/pine-idle-v2-loop.mp4"
+            poster="assets/video/pine-idle-v2-loop-first-frame.png"
+            muted
+            loop
+            playsinline
+            preload="auto"
+            aria-hidden="true"
+          ></video>
+          <div class="sky-glow" aria-hidden="true"></div>
+          <div class="cloud cloud-one" aria-hidden="true"></div>
+          <div class="cloud cloud-two" aria-hidden="true"></div>
+          <div class="distant-hills" aria-hidden="true"></div>
+          <div class="near-hills" aria-hidden="true"></div>
+
+          <article class="status-card status-card--opponent" id="opponent-status">
+            <div class="status-heading">
+              <div>
+                <strong data-role="name">小火龙</strong>
+                <span class="gender gender--male" aria-label="雄性">♂</span>
+              </div>
+              <span class="level" data-role="level">Lv.50</span>
+            </div>
+            <div class="status-meta">
+              <div class="types" data-role="types"></div>
+              <span class="status-badge" data-role="status" hidden></span>
+            </div>
+            <div class="hp-row">
+              <span>HP</span>
+              <div class="hp-track"><i class="hp-fill" data-role="hp-fill"></i></div>
+            </div>
+            <span class="hp-numeric hp-numeric--hidden" data-role="hp-number">??? / ???</span>
+          </article>
+
+          <div class="combatant combatant--opponent" id="opponent-combatant">
+            <div class="ground-shadow" aria-hidden="true"></div>
+            <img id="opponent-sprite" alt="对手的小火龙" />
+          </div>
+
+          <div class="combatant combatant--player" id="player-combatant">
+            <div class="ground-shadow" aria-hidden="true"></div>
+            <img id="player-sprite" alt="我方的皮卡丘" />
+          </div>
+
+          <article class="status-card status-card--player" id="player-status">
+            <div class="status-heading">
+              <div>
+                <strong data-role="name">皮卡丘</strong>
+                <span class="gender gender--female" aria-label="雌性">♀</span>
+              </div>
+              <span class="level" data-role="level">Lv.50</span>
+            </div>
+            <div class="status-meta">
+              <div class="types" data-role="types"></div>
+              <span class="status-badge" data-role="status" hidden></span>
+            </div>
+            <div class="hp-row">
+              <span>HP</span>
+              <div class="hp-track"><i class="hp-fill" data-role="hp-fill"></i></div>
+            </div>
+            <span class="hp-numeric" data-role="hp-number">110 / 110</span>
+          </article>
+
+          <section id="attack-video-stage" class="inline-cinema" hidden aria-label="连续战斗演出">
+            <div class="attack-cinema__screen" data-state="waiting">
+              <video id="trainer-command-video" src="assets/video/trainer-command-v1.mp4" playsinline muted preload="auto" aria-label="训练家喊招剪影" aria-hidden="true"></video>
+              <video id="trainer-recall-video" src="assets/video/trainer-recall-v1.mp4" playsinline muted preload="auto" aria-label="训练家举球剪影" aria-hidden="true"></video>
+              <video id="command-bridge" playsinline preload="auto" aria-hidden="true"></video>
+              <video id="switch-video" playsinline muted preload="auto" aria-hidden="true"></video>
+              <video id="recall-player-video" playsinline muted preload="auto" aria-hidden="true"></video>
+              <video id="recall-opponent-video" playsinline muted preload="auto" aria-hidden="true"></video>
+              <video id="attack-video-player" data-attack-video-slot="0" playsinline preload="auto" aria-label="战斗动画"></video>
+              <video data-attack-video-slot="1" playsinline preload="auto" aria-label="战斗动画续段" aria-hidden="true"></video>
+              <video data-attack-video-slot="2" playsinline preload="auto" aria-label="战斗动画预备" aria-hidden="true"></video>
+            </div>
+          </section>
+          <div class="cinema-controls" id="cinema-controls" hidden>
+            <span id="attack-video-beat"></span>
+            <button id="attack-video-sound" class="attack-cinema__sound" type="button" aria-pressed="true"><span aria-hidden="true">声</span><span data-sound-label>声音开启</span></button>
+            <button id="attack-video-skip" class="attack-cinema__skip" type="button">跳过动画</button>
+          </div>
+          <div id="attack-video-timeline" hidden></div>
+          <p id="attack-video-status" class="sr-only" role="status"></p>
+          <div class="move-flash" id="move-flash" aria-hidden="true"></div>
+          <div class="damage-pop" id="damage-pop" aria-hidden="true"></div>
+        </div>
+
+        <div class="interaction-deck">
+          <section class="message-panel" aria-label="战斗播报">
+            <div class="message-kicker">
+              <span class="message-icon" aria-hidden="true">›</span>
+              <span id="message-label">等待指令</span>
+            </div>
+            <p id="battle-message" aria-live="polite">要让皮卡丘做什么？</p>
+            <button class="storyboard-status" id="storyboard-status" type="button" data-state="idle">
+              <span class="storyboard-status__dot" aria-hidden="true"></span>
+              <span id="storyboard-status-copy">AI 导演 · 待机</span>
+            </button>
+            <details class="battle-history">
+              <summary>查看战斗记录</summary>
+              <ol id="battle-log"></ol>
+            </details>
+          </section>
+
+          <section class="command-panel" aria-label="战斗指令">
+            <div class="panel-view is-active" id="main-menu" data-panel="main">
+              <p class="panel-title">选择指令</p>
+              <div class="command-grid">
+                <button class="command-button command-button--fight" type="button" data-command="fight">
+                  <span class="command-symbol">✦</span>
+                  <span><strong>战斗</strong><small>选择招式</small></span>
+                  <kbd>1</kbd>
+                </button>
+                <button class="command-button" type="button" data-command="team">
+                  <span class="command-symbol">◉</span>
+                  <span><strong>宝可梦</strong><small>替换队员</small></span>
+                  <kbd>2</kbd>
+                </button>
+                <button class="command-button" type="button" data-command="bag">
+                  <span class="command-symbol">▣</span>
+                  <span><strong>背包</strong><small>使用道具</small></span>
+                  <kbd>3</kbd>
+                </button>
+                <button class="command-button command-button--muted" type="button" data-command="run">
+                  <span class="command-symbol">↗</span>
+                  <span><strong>逃跑</strong><small>训练家对战</small></span>
+                  <kbd>4</kbd>
+                </button>
+              </div>
+            </div>
+
+            <div class="panel-view" id="move-menu" data-panel="moves">
+              <div class="panel-heading">
+                <button class="back-button" type="button" data-back="main" aria-label="返回主指令">←</button>
+                <p class="panel-title">选择招式</p>
+                <span class="panel-note">快捷键 1–4</span>
+              </div>
+              <div class="move-grid" id="move-grid"></div>
+            </div>
+
+            <div class="panel-view" id="team-menu" data-panel="team">
+              <div class="panel-heading">
+                <button class="back-button" type="button" data-back="main" aria-label="返回主指令">←</button>
+                <p class="panel-title">选择宝可梦</p>
+                <span class="panel-note">替换会消耗回合</span>
+              </div>
+              <div class="team-list" id="team-list"></div>
+            </div>
+
+            <div class="panel-view" id="bag-menu" data-panel="bag">
+              <div class="panel-heading">
+                <button class="back-button" type="button" data-back="main" aria-label="返回主指令">←</button>
+                <p class="panel-title">背包</p>
+                <span class="panel-note">道具先于招式结算</span>
+              </div>
+              <div class="bag-list" id="bag-list"></div>
+            </div>
+
+            <div class="panel-view result-panel" id="result-menu" data-panel="result">
+              <span class="result-emblem" aria-hidden="true">★</span>
+              <p class="panel-title" id="result-title">对战结束</p>
+              <p id="result-copy"></p>
+              <button class="result-button" id="result-reset" type="button">再来一场</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="console-footer">
+          <div class="team-pips" id="player-pips" aria-label="我方队伍状态"></div>
+          <span>TAB 选择 · 1–4 快捷指令 · ESC 返回</span>
+          <span class="formula-chip">Lv.50 · IV 31 · EV 0 · 无特性</span>
+        </div>
+      </section>
+
+      <p class="project-note">
+        仅限本地非商业学习与规则验证。实时战场使用本地像素 2D 精灵；
+        宝可梦角色、名称及图像权利归其权利人所有。
+      </p>
+    </main>
+
+
+    <dialog class="rules-dialog" id="rules-dialog">
+      <form method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">BATTLE SPEC / 01</span>
+            <h2>本次实现的规则范围</h2>
+          </div>
+          <button class="dialog-close" value="close" aria-label="关闭规则说明">×</button>
+        </div>
+        <div class="rule-columns">
+          <section>
+            <h3>已经实现</h3>
+            <ul>
+              <li>属性一致加成（STAB）与 18 属性相克</li>
+              <li>物理 / 特殊伤害、85–100 随机数与要害</li>
+              <li>命中 / 闪避、能力阶级 −6 至 +6</li>
+              <li>速度、招式优先度、同速随机</li>
+              <li>麻痹、灼伤、中毒、睡眠、冰冻与混乱</li>
+              <li>PP、挣扎、换人、道具、濒死与胜负</li>
+            </ul>
+          </section>
+          <section>
+            <h3>本原型不包含</h3>
+            <ul>
+              <li>特性、性格、努力值分配与持有物</li>
+              <li>天气、场地、太晶化与双打目标规则</li>
+              <li>完整招式库、联网匹配与存档</li>
+            </ul>
+          </section>
+        </div>
+        <p class="dialog-footnote">
+          规则基准采用现代世代的核心单打逻辑；数值固定为等级 50、个体值 31、努力值 0、中性性格。
+          实时战场为本地像素 2D 表现，AI 生成的攻击视频不参与规则结算。
+        </p>
+      </form>
+    </dialog>
+
+    <dialog class="rules-dialog storyboard-dialog" id="storyboard-dialog" aria-labelledby="storyboard-title">
+      <form method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">ATTACK DIRECTOR / PHASE 01</span>
+            <h2 id="storyboard-title">AI 联合战斗分镜</h2>
+          </div>
+          <button class="dialog-close" value="close" aria-label="关闭 AI 分镜" autofocus>×</button>
+        </div>
+        <div class="storyboard-summary" id="storyboard-summary" aria-live="polite">
+          <div class="storyboard-empty">
+            <strong>还没有分镜记录</strong>
+            <p>发动招式后，这里会把双方行动合成为一条连续时间线。</p>
+          </div>
+        </div>
+        <details class="storyboard-debug">
+          <summary>查看结构化 JSON</summary>
+          <pre id="storyboard-json">{}</pre>
+        </details>
+        <p class="dialog-footnote">
+          联合分镜会通过服务端正式提交至 fal H3 Max Turbo，并产生实际视频费用。战斗结果仍由本地规则引擎锁定；AI 只负责镜头表现。
+        </p>
+      </form>
+    </dialog>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
