@@ -350,6 +350,17 @@ export const SPECIES = {
     videoReference: "assets/video-references/charmander-front.png",
     accent: "#ef7744",
   },
+  charizard: {
+    id: "charizard",
+    dex: 6,
+    name: "喷火龙",
+    types: ["fire", "flying"],
+    baseStats: { hp: 78, attack: 84, defense: 78, specialAttack: 109, specialDefense: 85, speed: 100 },
+    moveIds: ["ember", "dragonClaw", "ironTail", "smokescreen"],
+    sprite: "assets/sprites/charizard-front.gif",
+    videoReference: "assets/video-references/charizard-front.png",
+    accent: "#ef7744",
+  },
   geodude: {
     id: "geodude",
     dex: 74,

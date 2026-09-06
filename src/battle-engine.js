@@ -108,7 +108,7 @@ export function createBattle() {
     phase: "action",
     result: null,
     player: createTrainer("青叶", "player", ["pikachu", "squirtle", "bulbasaur"]),
-    opponent: createTrainer("露营少年 阿岚", "opponent", ["charmander", "dragonite", "gengar"]),
+    opponent: createTrainer("露营少年 阿岚", "opponent", ["charmander", "charizard", "gengar"]),
     log: ["露营少年 阿岚 向你发起了挑战！", "去吧，皮卡丘！"],
   };
 }

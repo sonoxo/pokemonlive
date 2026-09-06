@@ -112,7 +112,7 @@ test("强制换人不触发额外攻击或回合；敌方自动替换保留 KO �
   const result = resolveTurn(other, { type: "move", moveIndex: 0 }, () => .5, { type: "move", moveIndex: 0 });
   const replacement = result.events.find(e => e.type === "switch");
   assert.equal(replacement.sceneBefore.opponent.fainted, true);
-  assert.equal(replacement.sceneAfter.opponent.speciesId, "dragonite");
+  assert.equal(replacement.sceneAfter.opponent.speciesId, "charizard");
 });
 
 test("异步换人与规则事件游标保持顺序和一次性应用，包括重复 finish", async () => {
@@ -144,7 +144,7 @@ test("替换提示词区分旧/新角色并保留对手睡眠，预热要求匹�
   const spec = sceneVideoSpec({ kind: "switch", before, scene });
   assert.match(spec.prompt, /OUTGOING pikachu/);
   assert.match(spec.prompt, /FINAL player bulbasaur/);
-  assert.match(spec.prompt, /dragonite: sleep/);
+  assert.match(spec.prompt, /charizard: sleep/);
   for (const kind of ["idle", "command"]) {
     const warm = sceneVideoSpec({ kind, scene, sourceKey: spec.key });
     assert.match(warm.prompt, /Conditions persist in EVERY frame/);

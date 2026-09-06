@@ -18,11 +18,14 @@ Files used:
 - `squirtle-back.gif` — Pokémon #7, animated back sprite
 - `bulbasaur-back.gif` — Pokémon #1, animated back sprite
 - `charmander-front.gif` — Pokémon #4, animated front sprite
+- `charizard-front.gif` — Pokémon #6, animated front sprite (retrieved 2026-09-07)
 - `geodude-front.gif` — Pokémon #74, animated front sprite
 - `gastly-front.gif` — Pokémon #92, animated front sprite
 - `dragonite-front.gif` — Pokémon #149, animated front sprite (retrieved 2026-09-06)
 - `gengar-front.gif` — Pokémon #94, animated front sprite (retrieved 2026-09-06)
 
-Dragonite #149 and Gengar #94 were added on 2026-09-06 from the same repository: unmodified `sprites/pokemon/other/official-artwork/{dex}.png` for non-pixel identity references, `sprites/pokemon/versions/generation-v/black-white/animated/{dex}.gif` for UI/fallback, and `sprites/pokemon/versions/generation-v/black-white/{dex}.png` for the legacy pixel-reference path. Their stats, types and learnable moves, plus Dragon Claw's battle values, were checked against `https://pokeapi.co/api/v2/pokemon/dragonite`, `https://pokeapi.co/api/v2/pokemon/gengar` and `https://pokeapi.co/api/v2/move/dragon-claw` on that date. The default opposing team is Charmander, Dragonite, Gengar; Geodude/Gastly assets remain available for old cached battles and tests.
+Dragonite #149 and Gengar #94 were added on 2026-09-06 from the same repository: unmodified `sprites/pokemon/other/official-artwork/{dex}.png` for non-pixel identity references, `sprites/pokemon/versions/generation-v/black-white/animated/{dex}.gif` for UI/fallback, and `sprites/pokemon/versions/generation-v/black-white/{dex}.png` for the legacy pixel-reference path. Their stats, types and learnable moves, plus Dragon Claw's battle values, were checked against `https://pokeapi.co/api/v2/pokemon/dragonite`, `https://pokeapi.co/api/v2/pokemon/gengar` and `https://pokeapi.co/api/v2/move/dragon-claw` on that date. Geodude/Gastly assets remain available for old cached battles and tests.
+
+Charizard #6 was added on 2026-09-07 from the same three unmodified sprite/artwork paths above with `{dex}=6`. Its stats, fire/flying types and selected learnable moves (Ember, Dragon Claw, Iron Tail, Smokescreen) were checked against `https://pokeapi.co/api/v2/pokemon/charizard`. The default opposing team is now Charmander, Charizard, Gengar; Dragonite data and assets remain for historical battles. No new AI video was generated for this roster change.
 
 The upstream notice states that all image contents are copyright The Pokémon Company, while the repository is distributed under CC0 1.0 Universal. Pokémon character names, designs, and imagery remain the property of their respective rights holders. This local project is a non-commercial educational prototype and is not affiliated with or endorsed by Nintendo, GAME FREAK, or The Pokémon Company.

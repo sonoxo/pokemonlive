@@ -31,6 +31,7 @@ test("所有已注册宝可梦均使用本地前后视像素精灵", async () =>
     "assets/sprites/squirtle-back.gif",
     "assets/sprites/bulbasaur-back.gif",
     "assets/sprites/charmander-front.gif",
+    "assets/sprites/charizard-front.gif",
     "assets/sprites/geodude-front.gif",
     "assets/sprites/gastly-front.gif",
     "assets/sprites/dragonite-front.gif",

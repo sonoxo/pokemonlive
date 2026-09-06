@@ -118,7 +118,7 @@ test("KO 攻击播放时预热倒下者收回，不能按自动换入者状态�
   assert.equal(calls[0][0].opponent.speciesId, "charmander");
   assert.equal(calls[0][0].opponent.fainted, true);
   assert.equal(calls[0][2].ambient, false);
-  assert.equal(visualScene(result.state).opponent.speciesId, "dragonite");
+  assert.equal(visualScene(result.state).opponent.speciesId, "charizard");
 });
 
 test("待机、听令和两侧收回独立并发去重，取消旧场景不吞掉需要播放的收回", async () => {
