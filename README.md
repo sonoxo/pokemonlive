@@ -1,27 +1,46 @@
-# Pocket Battle Lab
+<div align="center">
 
-An experimental turn-based Pokémon singles battle game exploring **AI-generated game cinematics in real time**. Players choose moves, a rules engine resolves the battle, and AI turns the results into a continuous 2D animated sequence. The page uses a retro pixel UI, while generated videos use a hand-drawn, cel-shaded anime style. Videos play directly inside the battlefield, without a separate player modal.
+<h1>Pocket Battle Lab</h1>
 
-> This is an unofficial, local, non-commercial learning prototype with no Pokémon character license. Video generation, cloud frame extraction, and speech synthesis may incur charges. Opening the page can also trigger asset prewarming, so read the setup instructions and limitations first.
+<p><strong>Choose a move. Watch the battle come to life.</strong></p>
 
-## Background
+<p>Rule-driven Pokémon battles, brought to life with AI-generated 2D animation.</p>
 
-When generating a short video takes about as long as—or less time than—playing it, could a game generate its next cinematic from the player's latest choice instead of relying entirely on prerecorded animations?
+<p>
+  <code>Turn-based singles</code> ·
+  <code>Pixel UI + anime video</code> ·
+  <code>Chinese / English / Japanese</code>
+</p>
 
-This project explores that idea through familiar Pokémon battles: the player gives an order, the trainer calls out a move, the Pokémon responds, attacks, takes a hit, and returns to a standoff. The goal is to generate the next segment while the previous one plays, preserving character identity, move effects, and status conditions across shots.
+<p>
+  <a href="#preview">Preview</a> ·
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#api-integrations">APIs</a> ·
+  <a href="#development">Development</a>
+</p>
 
-This is a working experimental pipeline, not a promise of fixed generation times or zero waiting. Queueing, generation, transfer, and decoding all affect the experience.
+</div>
 
-## Screenshots
+> [!WARNING]
+> Unofficial, local, non-commercial learning prototype. No Pokémon character license has been obtained. Opening the page can trigger paid asset prewarming; read the setup instructions and limitations before running.
 
-Actual desktop captures with the Chinese UI selected, using the project's existing local idle video. Generation endpoints were disabled during capture; no additional paid assets were generated.
+## Preview
 
-**Battle overview: an animated idle scene with pixel-style status panels overlaid.**
+<p align="center">
+  <img src="docs/images/battle-overview.jpg" alt="Battle overview with anime-style idle video and pixel-style status panels" width="880">
+  <br>
+  <sub>Actual desktop gameplay · Chinese UI · Existing local idle video</sub>
+</p>
 
-![Battle overview](docs/images/battle-overview.jpg)
+Players choose moves, the rules engine resolves the battle, and AI turns the results into a continuous animated sequence. Videos play **inside the battlefield**, without a separate player modal.
+
+| Rules first | Anime presentation | Continuous playback |
+| :--- | :--- | :--- |
+| Code resolves hits, damage, and status. | Hand-drawn, cel-shaded video over a retro pixel UI. | Prewarm upcoming assets; hold the last frame if the next clip is late. |
 
 <details>
-<summary>Show the move selection screen</summary>
+<summary><strong>More screenshots — move selection</strong></summary>
 
 The move panel displays type, power, PP, and relevant type-effectiveness hints.
 
@@ -29,58 +48,22 @@ The move panel displays type, power, PP, and relevant type-effectiveness hints.
 
 </details>
 
-## How It Works
+<sub>Generation endpoints were disabled during screenshot capture. No additional paid assets were generated.</sub>
 
-The stack is vanilla HTML / CSS / JavaScript, a Node.js HTTP server, multiple HTMLVideoElement players, and local FFmpeg. There is no frontend framework or Three.js runtime dependency.
+## The Experiment
 
-```mermaid
-flowchart LR
-    A[Player chooses a move] --> B[Rules engine resolves the turn]
-    B --> C[Action records and before/after snapshots]
-    C --> D[DeepSeek shot planning / local fallback]
-    D --> E[Validate and rebuild prompts]
-    E --> F[fal generation and continuous playback]
-    F --> G[Closing sequence and state-matched idle]
-```
+When generating a short video takes about as long as—or less time than—playing it, could a game generate its next cinematic from the player's latest choice instead of relying entirely on prerecorded animations?
 
-### Battle State → Storyboard → Video
+This project explores that idea through familiar Pokémon battles: the player gives an order, the trainer calls out a move, the Pokémon responds, attacks, takes a hit, and returns to a standoff. The goal is to generate the next segment while the previous one plays, preserving character identity, move effects, and status conditions across shots.
 
-1. **Battle state:** A pure JavaScript rules engine resolves action order, hits, damage, type multipliers, status conditions, and fainting, then emits events and before/after snapshots. AI does not decide who hits, how much HP is lost, or who wins.
-2. **Storyboard:** DeepSeek returns only compact shot fields: outcome timing, cut points, shot sizes, and camera movement. The application validates these fields and rebuilds full prompts from the actual moves and results. The frontend allows 3 seconds for planning; a timeout or invalid output selects a deterministic local storyboard.
-3. **Video:** Each recorded action normally gets one 5-second clip, combining close-ups, action shots, and reactions. The sequence is not fixed at six clips. Inability to act due to paralysis, sleep, or freezing, as well as confusion self-damage, receives its own treatment based on the battle record.
-4. **State continuity:** Prompts carry both existing and newly applied conditions. A sleeping Pokémon must not wake without a corresponding game event, and a camera cut must not remove freezing. Collapse and spiral eyes are requested only for an actual faint. Caches distinguish the active pair, status conditions, language, and asset version; ordinary HP changes do not regenerate idle clips.
+> [!NOTE]
+> This is a working experimental pipeline, not a promise of fixed generation times or zero waiting. Queueing, generation, transfer, and decoding all affect the experience.
 
-### Continuous Playback and Prewarming
-
-- **Move selection:** A local trainer-silhouette clip plays alongside the MiniMax move callout, followed by a state-matched Pokémon response close-up. Planning and first-clip generation proceed in the background. If the response clip is not ready in time, the existing fallback is used rather than waiting indefinitely.
-- **Identity and opening frame:** A matching response clip, scene frame, or previous turn's tail frame lets Turbo continue the scene. Without a suitable anchor, the Reference model receives anime-style images of both Pokémon. These references preserve identity; they do not require pixel-art output.
-- **Frame continuity:** Once an attack clip is generated, cloud extraction returns its final frame as an HTTPS image URL for the next clip. This avoids waiting for a full local download, extraction, and upload. Clips that depend on the previous tail frame still generate sequentially; they cannot all run in parallel.
-- **Playback and downloads:** The first clip starts as soon as it is buffered and decoded, without waiting for the second. Three video slots handle active playback, preloading, and frame holding. If the next clip is late, the current tail frame remains visible until the next real frame is ready. Playback and archiving share one upstream GET; local Range playback requests no longer trigger upstream Range downloads.
-- **Switching Pokémon:** Trainer raises a Poké Ball → recall → send-out → idle. Recall clips are cached in advance; the transition provides time to prepare the send-out. Once the send-out asset is available, the new pair's idle, response, and recall clips are prewarmed.
-- **Status changes and closing sequence:** Assets matching the final battle state are prewarmed during combat playback. After the actions finish, the last attack's tail frame starts a closing clip that returns to a shared standoff before the matching idle takes over. Low HP and status conditions affect the performance, not the rules outcome.
-
-New battle and scene clips use `seed = 42`, but a fixed seed does not guarantee identical results across different prompts or input images. Local FFmpeg still handles idle looping, response-clip loudness processing, scene tail frames, and recovery from archived media; it no longer handles the real-time tail-frame path for new attack clips.
-
-## APIs Used
-
-These are the services integrated into the current code. Model availability, access permissions, and pricing are determined by the providers.
-
-| Service | Endpoint / Model | Purpose |
-| --- | --- | --- |
-| [DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) | `POST https://api.deepseek.com/chat/completions`; default: `deepseek-v4-flash` | Compact shot planning; overridable with `DEEPSEEK_MODEL` |
-| [fal H3 Max Turbo](https://fal.ai/models/minimax/h3-max-turbo/image-to-video/api) | `minimax/h3-max-turbo/image-to-video` | Attack, continuation, recall, response, and closing clips with an opening frame |
-| [fal H3 Max Reference](https://fal.ai/models/minimax/h3-max/reference-to-video/api) | `minimax/h3-max/reference-to-video` | Opening clips without a usable first frame, send-outs, and state-specific scenes with both character references |
-| [fal FFmpeg Extract Frame](https://fal.ai/models/fal-ai/ffmpeg-api/extract-frame/api) | `fal-ai/ffmpeg-api/extract-frame`, `frame_type: last` | Attack tail-frame URLs; one request shared by continuation, state prewarming, and archiving |
-| [MiniMax Speech WebSocket](https://platform.minimaxi.com/docs/api-reference/speech-t2a-websocket) | `wss://api.minimax.cn/ws/v1/t2a_v2`; `speech-2.8-turbo` | Player move callouts and switch announcements, cached by language and dialogue |
-| [fal H3 Max Turbo Text to Video](https://fal.ai/models/minimax/h3-max-turbo/text-to-video/api) | `minimax/h3-max-turbo/text-to-video` | Asset scripts pre-generate trainer silhouettes for reuse as local files |
-
-Video is generated through fal, **not through MiniMax's direct video API**. Only speech connects directly to MiniMax. The Chinese voice is `Chinese (Mandarin)_Straightforward_Boy`; English and Japanese use their respective language voices. Callout speech plays separately and is not baked into the video.
-
-Only the Node.js server reads API keys. Character images are locally stored PokéAPI assets, so gameplay does not require live PokéAPI lookups. See the [third-party notices](THIRD_PARTY_NOTICES.md) and [character reference provenance](assets/video-references/artwork/PROVENANCE.md).
-
-## Running Locally
+## Quickstart
 
 Requirements: Node.js, npm, and FFmpeg. The locally verified environment uses Node.js 24 and FFmpeg 8.1. Make `ffmpeg` available on PATH or set `FFMPEG_PATH`.
+
+### 1. Install and configure
 
 ```bash
 npm ci
@@ -97,7 +80,9 @@ FAL_VIDEO_RESOLUTION=480P
 MINIMAX_API_KEY=replace_with_your_minimax_key
 ```
 
-Start the server with the environment file explicitly loaded:
+### 2. Start the server
+
+Load the environment file explicitly:
 
 ```bash
 node --env-file=.env.local server.mjs
@@ -105,7 +90,9 @@ node --env-file=.env.local server.mjs
 
 Open [http://localhost:4173/](http://localhost:4173/). If the variables are already set in the process environment, you can also use `npm start`. The `--env-file` option ensures that the DeepSeek key, resolution, and other variables are loaded together; do not assume the service automatically reads every setting from `.env.local`.
 
-Optional settings: `PORT` changes the port; `DEEPSEEK_MODEL` overrides the planner model; `FAL_VIDEO_RESOLUTION` accepts `480P` or `768P` for attack generation. Without a planner key, local storyboards are used. Without video or speech keys, the corresponding generation features are unavailable, but the rules engine and local presentation can still run.
+### 3. Optional settings
+
+`PORT` changes the port; `DEEPSEEK_MODEL` overrides the planner model; `FAL_VIDEO_RESOLUTION` accepts `480P` or `768P` for attack generation. Without a planner key, local storyboards are used. Without video or speech keys, the corresponding generation features are unavailable, but the rules engine and local presentation can still run.
 
 ### Billing and Caching
 
@@ -114,7 +101,71 @@ Optional settings: `PORT` changes the port; `DEEPSEEK_MODEL` overrides the plann
 - Confirmed, retryable video-generation failures allow at most one automatic regeneration. An unknown submission outcome does not trigger a blind resubmission. Download or processing failures first attempt to recover the original task. Skipping playback does not guarantee that an already accepted provider task is free.
 - `.env*` files (except the example), `.local/`, and `outputs/` are Git-ignored. Never commit real keys or runtime artifacts containing private information.
 
-## Features and Limitations
+## Architecture
+
+**The rules engine owns the outcome. AI owns the presentation.**
+
+The stack is vanilla HTML / CSS / JavaScript, a Node.js HTTP server, multiple HTMLVideoElement players, and local FFmpeg. There is no frontend framework or Three.js runtime dependency.
+
+```mermaid
+flowchart LR
+    A["Battle engine<br/>Resolve actions + snapshot state"] --> B["Shot planner<br/>DeepSeek or local fallback"]
+    B --> C["Prompt validation<br/>Rebuild from battle facts"]
+    C --> D["Video pipeline<br/>fal generation + buffered playback"]
+    D --> E["Closing sequence<br/>State-matched idle"]
+
+    classDef rules fill:#fff0ad,stroke:#b58b00,color:#242f40
+    classDef planning fill:#e5efff,stroke:#3562a5,color:#242f40
+    classDef media fill:#ffe4df,stroke:#d45850,color:#242f40
+    classDef idle fill:#e4f2d6,stroke:#60884b,color:#242f40
+    class A rules
+    class B,C planning
+    class D media
+    class E idle
+```
+
+<details>
+<summary><strong>Battle state, storyboards, and status continuity</strong></summary>
+
+1. **Battle state:** A pure JavaScript rules engine resolves action order, hits, damage, type multipliers, status conditions, and fainting, then emits events and before/after snapshots. AI does not decide who hits, how much HP is lost, or who wins.
+2. **Storyboard:** DeepSeek returns only compact shot fields: outcome timing, cut points, shot sizes, and camera movement. The application validates these fields and rebuilds full prompts from the actual moves and results. The frontend allows 3 seconds for planning; a timeout or invalid output selects a deterministic local storyboard.
+3. **Video:** Each recorded action normally gets one 5-second clip, combining close-ups, action shots, and reactions. The sequence is not fixed at six clips. Inability to act due to paralysis, sleep, or freezing, as well as confusion self-damage, receives its own treatment based on the battle record.
+4. **State continuity:** Prompts carry both existing and newly applied conditions. A sleeping Pokémon must not wake without a corresponding game event, and a camera cut must not remove freezing. Collapse and spiral eyes are requested only for an actual faint. Caches distinguish the active pair, status conditions, language, and asset version; ordinary HP changes do not regenerate idle clips.
+
+</details>
+
+<details>
+<summary><strong>Playback, prewarming, switching, and closing sequences</strong></summary>
+
+- **Move selection:** A local trainer-silhouette clip plays alongside the MiniMax move callout, followed by a state-matched Pokémon response close-up. Planning and first-clip generation proceed in the background. If the response clip is not ready in time, the existing fallback is used rather than waiting indefinitely.
+- **Identity and opening frame:** A matching response clip, scene frame, or previous turn's tail frame lets Turbo continue the scene. Without a suitable anchor, the Reference model receives anime-style images of both Pokémon. These references preserve identity; they do not require pixel-art output.
+- **Frame continuity:** Once an attack clip is generated, cloud extraction returns its final frame as an HTTPS image URL for the next clip. This avoids waiting for a full local download, extraction, and upload. Clips that depend on the previous tail frame still generate sequentially; they cannot all run in parallel.
+- **Playback and downloads:** The first clip starts as soon as it is buffered and decoded, without waiting for the second. Three video slots handle active playback, preloading, and frame holding. If the next clip is late, the current tail frame remains visible until the next real frame is ready. Playback and archiving share one upstream GET; local Range playback requests no longer trigger upstream Range downloads.
+- **Switching Pokémon:** Trainer raises a Poké Ball → recall → send-out → idle. Recall clips are cached in advance; the transition provides time to prepare the send-out. Once the send-out asset is available, the new pair's idle, response, and recall clips are prewarmed.
+- **Status changes and closing sequence:** Assets matching the final battle state are prewarmed during combat playback. After the actions finish, the last attack's tail frame starts a closing clip that returns to a shared standoff before the matching idle takes over. Low HP and status conditions affect the performance, not the rules outcome.
+
+New battle and scene clips use `seed = 42`, but a fixed seed does not guarantee identical results across different prompts or input images. Local FFmpeg still handles idle looping, response-clip loudness processing, scene tail frames, and recovery from archived media; it no longer handles the real-time tail-frame path for new attack clips.
+
+</details>
+
+## API Integrations
+
+Video goes through **fal**, shot planning through **DeepSeek**, and callout speech directly through **MiniMax**. Model availability, access permissions, and pricing are determined by the providers.
+
+| Service | Endpoint / Model | Purpose |
+| --- | --- | --- |
+| [DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) | `POST https://api.deepseek.com/chat/completions`; default: `deepseek-v4-flash` | Compact shot planning; overridable with `DEEPSEEK_MODEL` |
+| [fal H3 Max Turbo](https://fal.ai/models/minimax/h3-max-turbo/image-to-video/api) | `minimax/h3-max-turbo/image-to-video` | Attack, continuation, recall, response, and closing clips with an opening frame |
+| [fal H3 Max Reference](https://fal.ai/models/minimax/h3-max/reference-to-video/api) | `minimax/h3-max/reference-to-video` | Opening clips without a usable first frame, send-outs, and state-specific scenes with both character references |
+| [fal FFmpeg Extract Frame](https://fal.ai/models/fal-ai/ffmpeg-api/extract-frame/api) | `fal-ai/ffmpeg-api/extract-frame`, `frame_type: last` | Attack tail-frame URLs; one request shared by continuation, state prewarming, and archiving |
+| [MiniMax Speech WebSocket](https://platform.minimaxi.com/docs/api-reference/speech-t2a-websocket) | `wss://api.minimax.cn/ws/v1/t2a_v2`; `speech-2.8-turbo` | Player move callouts and switch announcements, cached by language and dialogue |
+| [fal H3 Max Turbo Text to Video](https://fal.ai/models/minimax/h3-max-turbo/text-to-video/api) | `minimax/h3-max-turbo/text-to-video` | Asset scripts pre-generate trainer silhouettes for reuse as local files |
+
+Video is generated through fal, **not through MiniMax's direct video API**. Only speech connects directly to MiniMax. The Chinese voice is `Chinese (Mandarin)_Straightforward_Boy`; English and Japanese use their respective language voices. Callout speech plays separately and is not baked into the video.
+
+Only the Node.js server reads API keys. Character images are locally stored PokéAPI assets, so gameplay does not require live PokéAPI lookups. See the [third-party notices](THIRD_PARTY_NOTICES.md) and [character reference provenance](assets/video-references/artwork/PROVENANCE.md).
+
+## Scope and Limitations
 
 - Default player team: Pikachu, Squirtle, and Bulbasaur. Opposing team: Charmander, Charizard, and Gengar.
 - Supports physical and special damage, STAB, the 18-type effectiveness chart, critical hits, stat stages, speed and move priority, accuracy and PP, status conditions, switching, items, and win/loss resolution.
@@ -122,7 +173,7 @@ Optional settings: `PORT` changes the port; `DEEPSEEK_MODEL` overrides the plann
 - Implements core singles rules only, not the full move catalog, abilities, held items, weather, terrain, doubles, or Terastallization. Validation focuses on the desktop experience.
 - AI output may drift in identity, action accuracy, or status portrayal. Prompts are not frame-by-frame guarantees. Slow generation can still leave the display holding a tail frame, and an animation failure does not erase resolved battle results.
 
-## Code and Verification
+## Development
 
 | Location | Responsibility |
 | --- | --- |
