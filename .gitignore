@@ -5,3 +5,4 @@ node_modules/
 .local/
 .DS_Store
 outputs/
+/docs/archive/
