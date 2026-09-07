@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "gpt-doug:check": "node scripts/gpt-doug-check.mjs"
   },
   "dependencies": {
     "@fal-ai/client": "^1.10.1",

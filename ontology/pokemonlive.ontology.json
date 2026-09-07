@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "ontologyId": "gpt-doug-llm:pokemonlive",
+  "title": "PokemonLive GPT-DOUG Ontology",
+  "objectTypes": [
+    {
+      "id": "Repository",
+      "key": "repositoryId",
+      "properties": ["repositoryId", "name", "url", "defaultBranch"]
+    },
+    {
+      "id": "AgentModule",
+      "key": "moduleId",
+      "properties": ["moduleId", "system", "capabilities", "authority"]
+    },
+    {
+      "id": "GameSession",
+      "key": "sessionId",
+      "properties": ["sessionId", "battleEpoch", "language", "createdAt"]
+    },
+    {
+      "id": "BattleState",
+      "key": "stateId",
+      "properties": ["stateId", "turn", "phase", "winner", "snapshot"]
+    },
+    {
+      "id": "Combatant",
+      "key": "combatantId",
+      "properties": ["combatantId", "side", "speciesId", "hp", "status", "fainted"]
+    },
+    {
+      "id": "Move",
+      "key": "moveId",
+      "properties": ["moveId", "name", "type", "power", "priority"]
+    },
+    {
+      "id": "Storyboard",
+      "key": "storyboardId",
+      "properties": ["storyboardId", "source", "language", "plan"]
+    },
+    {
+      "id": "MediaJob",
+      "key": "jobId",
+      "properties": ["jobId", "kind", "status", "provider", "latencyMs"]
+    }
+  ],
+  "linkTypes": [
+    {"id": "REGISTERED_AS", "from": "Repository", "to": "AgentModule", "cardinality": "one-to-one"},
+    {"id": "OWNS_SESSION", "from": "Repository", "to": "GameSession", "cardinality": "one-to-many"},
+    {"id": "HAS_STATE", "from": "GameSession", "to": "BattleState", "cardinality": "one-to-many"},
+    {"id": "CONTAINS_COMBATANT", "from": "BattleState", "to": "Combatant", "cardinality": "one-to-many"},
+    {"id": "SELECTS_MOVE", "from": "Combatant", "to": "Move", "cardinality": "many-to-many"},
+    {"id": "PRESENTED_BY", "from": "BattleState", "to": "Storyboard", "cardinality": "one-to-many"},
+    {"id": "RENDERS_AS", "from": "Storyboard", "to": "MediaJob", "cardinality": "one-to-many"}
+  ],
+  "governedActions": [
+    {
+      "id": "READ_BATTLE_CONTEXT",
+      "actor": "AgentModule",
+      "target": "BattleState",
+      "effect": "read-only"
+    },
+    {
+      "id": "REQUEST_PRESENTATION",
+      "actor": "AgentModule",
+      "target": "Storyboard",
+      "effect": "presentation-only"
+    }
+  ],
+  "deniedActions": [
+    "SET_HP",
+    "APPLY_DAMAGE",
+    "FORCE_HIT",
+    "FORCE_STATUS",
+    "DECLARE_WINNER",
+    "MUTATE_BATTLE_OUTCOME"
+  ]
+}
