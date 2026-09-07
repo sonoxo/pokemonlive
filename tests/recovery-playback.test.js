@@ -12,7 +12,7 @@ import { AttackVideoPlayer } from "../src/attack-video-player.js";
 const defer = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-async function harness({ realPlayer = false, failFirst = false } = {}) {
+async function harness({ realPlayer = false, failFirst = false, failRecovery = false } = {}) {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const body = app.slice(app.indexOf("async function requestAndPlayAttackVideos("), app.indexOf("function updateStatusCard("));
   const result = resolveTurn(createBattle(), { type: "move", moveIndex: 0 }, () => .5, { type: "move", moveIndex: 0 });
@@ -20,7 +20,7 @@ async function harness({ realPlayer = false, failFirst = false } = {}) {
   const lastAttack = defer(), recovery = defer(), requested = defer(), plays = [], impacts = [], marks = [], statuses = [];
   const run = { controller: new AbortController(), epoch: 1, bridgeDone: Promise.resolve(), events: [], startedAt: performance.now(),
     mark: name => marks.push(name) };
-  const firstReady = defer(), decoded = [];
+  const firstReady = defer(), decoded = [], recoverySignals = [];
   class Video extends EventTarget {
     constructor() {
       super(); this.readyState = 0; this.currentTime = 0; this.style = {}; this.classes = new Set();
@@ -37,7 +37,7 @@ async function harness({ realPlayer = false, failFirst = false } = {}) {
       this.paused = false;
       queueMicrotask(() => {
         this.frame?.();
-        if (failFirst && this.src === "/attacks/0.mp4") this.dispatchEvent(new Event("error"));
+        if ((failFirst && this.src === "/attacks/0.mp4") || (failRecovery && this.src === "/recovery.mp4")) this.dispatchEvent(new Event("error"));
         else if (this.src === `/attacks/${plan.turn.sequence.length - 1}.mp4`) lastAttack.promise.then(() => this.dispatchEvent(new Event("ended")));
         else queueMicrotask(() => this.dispatchEvent(new Event("ended")));
       });
@@ -70,7 +70,7 @@ async function harness({ realPlayer = false, failFirst = false } = {}) {
       if (realPlayer && index === 0) await firstReady.promise;
       return { clip: { index, localVideoUrl: `/attacks/${index}.mp4`, videoUrl: `https://cdn.example/${index}.mp4` }, session: {} };
     },
-    requestSceneVideo: async (input, signal) => { requested.resolve(input); return waitForScene(recovery.promise, signal); },
+    requestSceneVideo: async (input, signal) => { recoverySignals.push(signal); requested.resolve(input); return waitForScene(recovery.promise, signal); },
     fetch: async () => ({ ok: true }), clipGapMetrics: () => null, warmAfterAttack() {},
     renderAttackVideoSession() {}, setAttackVideoCopy() {}, BLOCKED_REASON_LABELS: {},
     attackVideoAutoplayBlocked: false, renderAttackVideoSoundControl() {}, heldFrame: null,
@@ -82,8 +82,26 @@ async function harness({ realPlayer = false, failFirst = false } = {}) {
   const done = bound.play({ plan }, attacks, 1, 1, run, cursor, {
     controller: new AbortController(), promise: Promise.resolve({ ok: true, session: { id: "11111111-1111-4111-8111-111111111111" } }),
   });
-  return { bound, done, requested, recovery, lastAttack, run, impacts, plays, marks, statuses, attacks, plan, firstReady, decoded, videos };
+  return { bound, done, requested, recovery, lastAttack, run, impacts, plays, marks, statuses, attacks, plan, firstReady, decoded, videos, recoverySignals };
 }
+
+test("流式收尾经 CDN 备用正常播完不误取消未完归档；跳过仍中止收尾任务", async () => {
+  for (const cancel of [false, true]) {
+    const h = await harness({ realPlayer: true, failRecovery: true });
+    const input = await h.requested.promise;
+    h.recovery.resolve({ kind: "recovery", scene: input.scene, key: "a".repeat(64), streamable: true, playable: false,
+      videoUrl: "/recovery.mp4", fallbackVideoUrl: "https://cdn.example/recovery.mp4" });
+    h.firstReady.resolve(); await tick();
+    if (cancel) h.run.controller.abort();
+    h.lastAttack.resolve(); await h.done;
+    assert(h.run.controller.signal.aborted, "页面播放器完成/取消后均清理");
+    assert.equal(h.recoverySignals[0].aborted, cancel, "不能把正常播放器清理当成取消已付费收尾");
+    if (!cancel) {
+      assert(h.decoded.some(item => item.src === "https://cdn.example/recovery.mp4"));
+      assert(h.marks.includes("complete")); assert.equal(h.bound.held().sceneAnchorKey, "a".repeat(64));
+    }
+  }
+});
 
 test("真实三槽播放器：末段乱序先 ready、旧尾帧占槽时，收尾只生成不抢首段或故障恢复槽", async () => {
   for (const failFirst of [false, true]) {

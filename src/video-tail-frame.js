@@ -23,7 +23,7 @@ export async function downloadVideo(url, { fetchImpl = fetch, signal, maxBytes =
   if (response.url) validateVideoUrl(response.url);
   const declaredSize = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredSize) && declaredSize > maxBytes) throw new RangeError("VIDEO_DOWNLOAD_TOO_LARGE");
-  onHeaders(Number.isSafeInteger(declaredSize) && declaredSize > 0 ? declaredSize : null);
+  onHeaders(Number.isSafeInteger(declaredSize) && declaredSize > 0 ? declaredSize : null, response.headers);
 
   const reader = response.body.getReader();
   const chunks = [];
@@ -49,7 +49,7 @@ export async function downloadVideo(url, { fetchImpl = fetch, signal, maxBytes =
   return bytes;
 }
 
-function runFfmpeg(ffmpegPath, inputPath, outputPath, signal) {
+export function runTailFfmpeg(ffmpegPath, inputPath, outputPath, signal, inputOptions = []) {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       reject(abortError());
@@ -59,8 +59,10 @@ function runFfmpeg(ffmpegPath, inputPath, outputPath, signal) {
       "-hide_banner",
       "-loglevel", "error",
       "-y",
+      ...inputOptions,
       "-sseof", "-1",
       "-i", inputPath,
+      "-map", "0:v:0",
       "-an",
       "-q:v", "3",
       "-update", "1",
@@ -115,7 +117,7 @@ export async function extractVideoTailFrame(videoUrl, {
       maxBytes: maxVideoBytes,
     });
     await writeFile(inputPath, bytes);
-    await runFfmpeg(ffmpegPath, inputPath, outputPath, controller.signal);
+    await runTailFfmpeg(ffmpegPath, inputPath, outputPath, controller.signal);
     const frame = await readFile(outputPath);
     if (!frame.length || frame.length > 3 * 1024 * 1024) throw new RangeError("TAIL_FRAME_SIZE_INVALID");
     return new Blob([frame], { type: "image/jpeg" });

@@ -149,3 +149,17 @@ test("已 canplay 但首帧永不出现时，独立首帧截止时间有界退�
   await assert.rejects(playback.ended, /VIDEO_FIRST_FRAME_TIMEOUT/);
   assert(old.classes.has("is-visible")); assert(!video.classes.has("is-visible"));
 });
+
+test("fal Range-only 素材读取失败不另开 CDN 整片下载，保留旧画面", async () => {
+  const session = playbackSession({ id: "id", clips: [{ index: 0, videoUrl: "https://v3.fal.media/paid.mp4" }] });
+  assert.equal(session.clips[0].rangeOnly, true);
+  const { player, videos, controller, events } = setup(videos => ({ protectedVideo: videos[2],
+    waitForClip: async () => ({ clip: session.clips[0], session }),
+  }));
+  videos[2].classList.add("is-visible");
+  const sources = [];
+  for (const video of videos) video.onLoad = v => { sources.push(v.src); v.emit("error"); };
+  assert.equal((await player.prepare(0)).error.message, "VIDEO_BUFFER_FAILED");
+  assert.deepEqual(sources, ["/api/attack-videos/id/clips/0.mp4"]);
+  assert(videos[2].classes.has("is-visible")); assert(!events.some(e => e.name.includes("fallback"))); controller.abort();
+});

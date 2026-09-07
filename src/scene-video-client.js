@@ -18,7 +18,7 @@ const delay = (ms, signal) => new Promise((resolve, reject) => {
 });
 
 export async function requestSceneVideo(input, signal, fetchImpl = fetch) {
-  let key;
+  let key, streaming = false;
   const cancel = () => { if (key) void fetchImpl(`/api/scene-videos/${key}`, { method: "DELETE", keepalive: true }).catch(() => {}); };
   signal.addEventListener("abort", cancel, { once: true });
   try {
@@ -32,7 +32,7 @@ export async function requestSceneVideo(input, signal, fetchImpl = fetch) {
     key = job.key;
     if (signal.aborted) { cancel(); throw aborted(); }
     const deadline = Date.now() + 12 * 60 * 1000;
-    while (!job.playable && job.status !== "ready") {
+    while (!job.playable && !(job.kind === "recovery" && job.streamable) && job.status !== "ready") {
       if (["error", "cancelled"].includes(job.status)) throw Object.assign(new Error(job.error || "场景动画未完成"), {
         retryable: job.retryable === true, retryAfterMs: job.retryAfterMs ?? 0, code: job.errorCode,
       });
@@ -43,11 +43,16 @@ export async function requestSceneVideo(input, signal, fetchImpl = fetch) {
       job = (await status.json()).job;
     }
     if (signal.aborted) throw aborted();
+    streaming = job.kind === "recovery" && job.streamable && !job.playable;
     return job;
   } catch (error) {
     cancel();
     throw error;
-  } finally { signal.removeEventListener("abort", cancel); }
+  } finally {
+    // Streaming recovery can still be downloading when handed to the player.
+    // Keep skip/restart cancellation attached until this run ends.
+    if (!streaming) signal.removeEventListener("abort", cancel);
+  }
 }
 
 export class SceneAssetCache {

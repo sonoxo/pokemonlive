@@ -1,5 +1,6 @@
 import { createFalClient } from "@fal-ai/client";
 import { FAL_VIDEO_MODEL, FAL_VIDEO_REFERENCE_MODEL } from "./fal-video-runway.js";
+import { falVideoFailure, falVideoFailureMessage } from "./fal-video-failure.js";
 
 export const recoveryError = code => Object.assign(new Error(code), { code });
 
@@ -28,7 +29,14 @@ export async function recoverSceneClip(paid, { credentials, signal, clientFactor
       readSignal.addEventListener("abort", stop, { once: true });
     });
   }
-  const result = await client.queue.result(paid.model, { requestId: paid.requestId, abortSignal: readSignal });
+  let result;
+  try {
+    result = await client.queue.result(paid.model, { requestId: paid.requestId, abortSignal: readSignal });
+  } catch (error) {
+    if (readSignal.aborted) throw error;
+    const failure = falVideoFailure(error, "result");
+    throw Object.assign(new Error(falVideoFailureMessage(failure)), { failure, status: failure.status });
+  }
   const videoUrl = result.data?.video?.url;
   if (typeof videoUrl !== "string" || new URL(videoUrl).protocol !== "https:") throw recoveryError("PAID_TASK_UNAVAILABLE");
   return { requestId: paid.requestId, model: paid.model, videoUrl };

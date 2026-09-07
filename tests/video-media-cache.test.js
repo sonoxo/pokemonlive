@@ -10,6 +10,12 @@ import { archiveAttackClip } from "../server.mjs";
 
 const url = "https://example.com/paid.mp4";
 const defer = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
+// Keep the legacy local-cache unit coverage offline. Production injects the
+// cloud URL cache instead; its independent critical path is tested separately.
+const localArchiveTail = cache => ({
+  tailFrames: { url: async source => { const frame = await cache.tail(source); return `data:image/jpeg;base64,${Buffer.from(await frame.arrayBuffer()).toString("base64")}`; } },
+  fetchTail: async source => Buffer.from(source.split(",")[1], "base64"),
+});
 
 test("归档、续段、状态预热、播放器共享一次下载及一次抽帧，归档未完成不挡尾帧", async t => {
   const directory = await mkdtemp(join(tmpdir(), "pokemon-media-"));
@@ -19,7 +25,7 @@ test("归档、续段、状态预热、播放器共享一次下载及一次抽�
   const cache = new VideoMediaCache({ fetchImpl: async () => { downloads++; await download.promise; return new Response("paid video"); },
     tailExtractor: async (_url, { fetchImpl }) => { extracts++; assert.equal(await (await fetchImpl()).text(), "paid video"); return new Blob(["tail"]); } });
   const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: url }, prompt: "test" }, {
-    directory, cache, continuity: { resolveTail: continuity.resolve },
+    directory, cache, ...localArchiveTail(cache), continuity: { resolveTail: continuity.resolve },
     writeArtifact: async (...args) => { await disk.promise; return writeFile(...args); },
   }).then(() => { archived = true; });
   const continuation = cache.tail(url);
@@ -41,7 +47,7 @@ test("磁盘归档失败不会抢先把仍在提取的共享尾帧清空", async
   const tail = defer(), continuity = defer(), diskFailed = defer();
   const cache = new VideoMediaCache({ fetchImpl: async () => new Response("video"), tailExtractor: () => tail.promise });
   const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: url } }, {
-    directory, cache, continuity: { resolveTail: continuity.resolve }, writeArtifact: async () => { diskFailed.resolve(); throw new Error("disk full"); },
+    directory, cache, ...localArchiveTail(cache), continuity: { resolveTail: continuity.resolve }, writeArtifact: async () => { diskFailed.resolve(); throw new Error("disk full"); },
   });
   await diskFailed.promise;
   tail.resolve(new Blob(["valid tail"]));
@@ -57,7 +63,7 @@ test("归档仍在写盘时，容量或TTL淘汰不能移走共享资源或触�
   const cache = new VideoMediaCache({ maxCacheBytes: 4, ttlMs: 10, now: () => now,
     fetchImpl: async () => { downloads++; return new Response("1234"); }, tailExtractor: async () => new Blob(["tail"]) });
   const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: url } }, {
-    cache, directory, writeArtifact: async (...args) => { await disk.promise; return writeFile(...args); },
+    cache, directory, ...localArchiveTail(cache), writeArtifact: async (...args) => { await disk.promise; return writeFile(...args); },
   });
   await cache.bytes(url);
   now = 11; await cache.bytes(`${url}?pressure`); cache.trim();
@@ -149,6 +155,37 @@ test("播放器渐进接收共享字节，不等完整下载；断开一个播�
 
 function deferredChunk(response) { return new Promise(resolve => response.once("chunk", resolve)); }
 
+test("渐进有限 Range 不再等全片：前缀/中段按字节可用返回、非法范围立即拒绝", async () => {
+  let stream;
+  const cache = new VideoMediaCache({ fetchImpl: async () => new Response(new ReadableStream({ start(c) { stream = c; } }), {
+    headers: { "content-length": "10" },
+  }) });
+  const entry = cache.pin(url);
+  const prefix = new StreamingResponse(), middle = new StreamingResponse();
+  const a = sendDownloadingVideo({ method: "GET", headers: { range: "bytes=0-1" } }, prefix, entry);
+  const b = sendDownloadingVideo({ method: "GET", headers: { range: "bytes=3-6" } }, middle, entry);
+  stream.enqueue(Buffer.from("01234")); await a;
+  assert.equal(prefix.status, 206); assert.equal(prefix.headers["Content-Length"], 2);
+  assert.equal(Buffer.concat(prefix.parts).toString(), "01"); assert.equal(entry.settled, false);
+  const next = deferredChunk(middle);
+  stream.enqueue(Buffer.from("567")); await next; await b;
+  assert.equal(Buffer.concat(middle.parts).toString(), "3456"); assert.equal(entry.settled, false);
+  for (const range of ["bytes=20-", "bytes=4-2", "bytes=-0", "bytes=-", "bytes=0-2,5-6", "foo"]) {
+    const response = new StreamingResponse();
+    await sendDownloadingVideo({ method: "GET", headers: { range } }, response, entry);
+    assert.equal(response.status, 416); assert.equal(entry.settled, false);
+  }
+  const head = new StreamingResponse();
+  await sendDownloadingVideo({ method: "HEAD", headers: { range: "bytes=-3" } }, head, entry);
+  assert.equal(head.headers["Content-Range"], "bytes 7-9/10"); assert.equal(head.parts.length, 0);
+  const suffix = new StreamingResponse();
+  const c = sendDownloadingVideo({ method: "GET", headers: { range: "bytes=-3" } }, suffix, entry);
+  stream.enqueue(Buffer.from("89")); await c;
+  assert.equal(Buffer.concat(suffix.parts).toString(), "789"); assert.equal(entry.settled, false);
+  stream.close(); await entry.bytes;
+  assert.equal(entry.readers, 0); assert.equal(entry.listeners.size, 0);
+});
+
 test("共享渐进输出的下载失败关闭未完成响应，未完整数据不得拿去抽尾帧", async () => {
   let controller, extracts = 0;
   const cache = new VideoMediaCache({ fetchImpl: async () => new Response(new ReadableStream({ start(c) { controller = c; } }), { headers: { "content-length": "10" } }),
@@ -175,7 +212,7 @@ test("归档目录创建失败时仍保护共享尾帧直到提取完成", async
   let now = 0; const gate = defer(), entered = defer();
   const cache = new VideoMediaCache({ ttlMs: 1, now: () => now, fetchImpl: async () => new Response("video"),
     tailExtractor: async () => { entered.resolve(); return gate.promise; } });
-  const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: url } }, { cache, directory: blocked });
+  const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: url } }, { cache, directory: blocked, ...localArchiveTail(cache) });
   const failed = assert.rejects(archive);
   await entered.promise; now = 10; cache.trim(); assert(cache.entries.has(url));
   gate.resolve(new Blob(["tail"])); await failed;

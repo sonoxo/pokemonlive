@@ -5,6 +5,7 @@ import { createFalClient } from "@fal-ai/client";
 
 import { extractVideoTailFrame } from "./video-tail-frame.js";
 import { waitForFalStatus } from "./fal-status.js";
+import { falVideoFailure, falVideoFailureMessage } from "./fal-video-failure.js";
 
 export const FAL_VIDEO_MODEL = "minimax/h3-max-turbo/image-to-video";
 export const FAL_VIDEO_REFERENCE_MODEL = "minimax/h3-max/reference-to-video";
@@ -132,9 +133,29 @@ function tailFrameUrlFromUpload(value) {
   return url.href;
 }
 
+export function createVideoFalClient(credentials, fetchImpl = fetch) {
+  const client = createFalClient({ credentials, fetch: fetchImpl });
+  // SDK queue.submit retries POST even after unknown network failures. Own the
+  // paid POST so only our confirmed-failure policy can submit it a second time.
+  client.queue.submit = async (model, { input, abortSignal }) => {
+    if (![FAL_VIDEO_MODEL, FAL_VIDEO_REFERENCE_MODEL].includes(model)) throw new TypeError("fal 视频模型无效");
+    const response = await fetchImpl(`https://queue.fal.run/${model}`, {
+      method: "POST", signal: abortSignal, redirect: "error",
+      headers: { Authorization: `Key ${credentials}`, "Content-Type": "application/json", Accept: "application/json",
+        "X-Fal-Object-Lifecycle-Preference": JSON.stringify({ expiration_duration_seconds: 3600 }) },
+      body: JSON.stringify(input),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw Object.assign(new Error("FAL_SUBMISSION_REJECTED"), { status: response.status, body });
+    if (!/^[a-zA-Z0-9-]{1,128}$/.test(body?.request_id ?? "")) throw new Error("FAL_SUBMISSION_UNCONFIRMED");
+    return body;
+  };
+  return client;
+}
+
 export class FalVideoRunway {
   constructor({
-    clientFactory = (credentials) => createFalClient({ credentials }),
+    clientFactory = createVideoFalClient,
     tailFrameExtractor = extractVideoTailFrame,
     tailFrameUploader = (client, frame) => client.storage.upload(frame, { lifecycle: { expiresIn: "1h" } }),
     resolution = "480P",
@@ -149,6 +170,7 @@ export class FalVideoRunway {
     metricSink = () => {},
     clipSink = async () => {},
     submittedSink = async () => {},
+    maxRegenerations = 1,
   } = {}) {
     if (!FAL_VIDEO_RESOLUTIONS.has(resolution)) throw new TypeError("fal 分辨率无效");
     if (typeof metricSink !== "function") throw new TypeError("metricSink 必须为函数");
@@ -177,6 +199,8 @@ export class FalVideoRunway {
     this.metricSink = metricSink;
     this.clipSink = clipSink;
     this.submittedSink = submittedSink;
+    if (![0, 1].includes(maxRegenerations)) throw new RangeError("视频最多自动重新生成一次");
+    this.maxRegenerations = maxRegenerations;
     this.sessions = new Map();
   }
 
@@ -244,6 +268,8 @@ export class FalVideoRunway {
         resultMs: null,
         statusTransport: null,
         error: null,
+        failure: null,
+        regenerationCount: 0,
       })),
     };
     this.sessions.set(session.id, session);
@@ -321,6 +347,8 @@ export class FalVideoRunway {
         resultMs: clip.resultMs,
         statusTransport: clip.statusTransport,
         error: clip.error,
+        failure: clip.failure,
+        regenerationCount: clip.regenerationCount,
       })),
     };
   }
@@ -391,6 +419,13 @@ export class FalVideoRunway {
         () => controller.abort(),
       );
       if (session.cancelled) return null;
+      // Cloud extraction already returns a usable image URL. Never download or
+      // upload it on the continuation path. Blob support is for local tooling.
+      if (typeof frame === "string") {
+        const url = tailFrameUrlFromUpload(frame);
+        nextClip.status = "queued";
+        return url;
+      }
       const uploadCancelled = new Promise((_, reject) => {
         session.abortUpload = () => reject(new DOMException("Aborted", "AbortError"));
       });
@@ -428,12 +463,30 @@ export class FalVideoRunway {
   }
 
   async generateClip(client, session, clip, sourceImageUrl) {
+    for (let attempt = 0; attempt <= this.maxRegenerations; attempt++) {
+      if (session.cancelled) return false;
+      clip.regenerationCount = attempt;
+      const ready = await this.generateClipAttempt(client, session, clip, sourceImageUrl);
+      if (ready || session.cancelled || !clip.failure?.regenerable || attempt === this.maxRegenerations) return ready;
+      // A definite failure owns no usable video. Retry just this shot with the
+      // exact same prompt, seed and source tail; never buy previous ready clips.
+      clip.requestId = null;
+      delete clip.cancelPromise;
+      clip.failure = null;
+      clip.error = null;
+      clip.submitMs = clip.queueWaitMs = clip.providerRunMs = clip.resultMs = null;
+    }
+    return false;
+  }
+
+  async generateClipAttempt(client, session, clip, sourceImageUrl) {
     // Do not connect user cancellation to the submit request. fal may already
     // have accepted a paid job while its request_id response is still in
     // flight. We keep waiting (within the hard submit deadline), capture that
     // id, and then explicitly cancel the remote queue item.
     const submitController = new AbortController();
     let requestController = null;
+    let stage = "input";
     clip.status = "submitting";
     session.updatedAt = this.now();
     const startedAt = this.now();
@@ -461,6 +514,7 @@ export class FalVideoRunway {
         throw new Error("FAL_CONTINUATION_FRAME_MISSING");
       }
       if (session.closingFrame && clip.index === session.clips.length - 1) input.end_image_url = session.closingFrame;
+      stage = "submit";
       const queued = await withDeadline(
         client.queue.submit(clip.model, {
           input,
@@ -472,6 +526,7 @@ export class FalVideoRunway {
         () => submitController.abort(),
       );
       clip.requestId = queued.request_id;
+      stage = "journal";
       const submittedAt = this.monotonicNow();
       clip.submitMs = Math.max(0, Math.round(submittedAt - startedMonotonic));
       await withDeadline(this.submittedSink({ session: this.snapshot(session), clip: this.snapshot(session).clips[clip.index] }), this.submitTimeoutMs, "SUBMIT_JOURNAL_TIMEOUT");
@@ -486,6 +541,7 @@ export class FalVideoRunway {
       session.updatedAt = this.now();
       let firstRunningAt = null;
       let completedStatusAt = null;
+      stage = "status";
       await waitForFalStatus(client, clip.model, {
         requestId: clip.requestId,
         signal: requestController.signal,
@@ -512,11 +568,13 @@ export class FalVideoRunway {
         return;
       }
       const resultStarted = this.monotonicNow();
+      stage = "result";
       const result = await client.queue.result(clip.model, {
         requestId: clip.requestId,
         abortSignal: requestController.signal,
       });
       if (session.cancelled) return;
+      stage = "output";
       clip.resultMs = Math.max(0, Math.round(this.monotonicNow() - resultStarted));
       clip.videoUrl = videoUrlFromResult(result);
       clip.expandedPrompt = typeof result.data?.expanded_prompt === "string"
@@ -537,9 +595,11 @@ export class FalVideoRunway {
         await this.cancelRemote(client, clip);
         clip.status = "cancelled";
       } else {
-        if (clip.requestId) await this.cancelRemote(client, clip);
+        // A failed read is not evidence that the accepted paid task failed.
+        // Leave it available for read-only recovery instead of cancelling it.
+        clip.failure = falVideoFailure(error, stage);
         clip.status = "error";
-        clip.error = publicError(error);
+        clip.error = clip.failure.code === "FAL_REQUEST_UNCONFIRMED" ? publicError(error) : falVideoFailureMessage(clip.failure);
         clip.generationMs = Math.max(0, Math.round(this.monotonicNow() - startedMonotonic));
       }
       return false;

@@ -11,6 +11,7 @@ import { COMMAND_AUDIO_VERSION, normalizeCommandAudio } from "./command-video-au
 import { BATTLE_RECOVERY_VERSION, sanitizeRecoveryHealth, battleRecoveryDirection } from "./battle-recovery.js";
 import { recoverSceneClip, validatePaidScene, recoveryError } from "./scene-video-recovery.js";
 import { normalizeLanguage } from "./language.js";
+import { falVideoFailureMessage } from "./fal-video-failure.js";
 
 const ACTIVE = new Set(["queued", "loading", "generating"]);
 export const SCENE_VIDEO_KEY = /^[0-9a-f]{64}$/;
@@ -28,6 +29,21 @@ async function atomicArtifact(path, bytes) {
 async function optionalJson(path) {
   try { return JSON.parse(await readFile(path, "utf8")); }
   catch (error) { if (error.code === "ENOENT") return null; throw recoveryError("UNCONFIRMED_SUBMISSION"); }
+}
+
+const submissionPath = (directory, attempt) => join(directory, attempt === 1 ? "submission-retry-1.json" : "submission.json");
+async function readSubmission(directory) {
+  for (const attempt of [1, 0]) {
+    const paid = await optionalJson(submissionPath(directory, attempt));
+    if (!paid) continue;
+    if ((paid.attempt ?? 0) !== attempt) throw recoveryError("UNCONFIRMED_SUBMISSION");
+    return { ...paid, attempt };
+  }
+  return null;
+}
+function validateFailedSubmission(paid, job) {
+  if (paid.key !== job.key || paid.kind !== job.kind || (paid.language ?? "zh") !== job.language
+    || paid.status !== "failed" || paid.failure?.confirmed !== true) throw recoveryError("UNCONFIRMED_SUBMISSION");
 }
 
 export function sceneVideoSpec(input) {
@@ -106,13 +122,17 @@ export class SceneVideoService {
   snapshot(job) {
     const { key, kind, scene, status, error, generationMs } = job;
     const playable = !["error", "cancelled"].includes(status) && Boolean(job.playable || status === "ready");
+    const streamable = !playable && job.kind === "recovery" && !["error", "cancelled"].includes(status)
+      && !job.controller?.signal.aborted && Boolean(job.stream?.available && !job.stream.error);
     const archiveReady = job.archiveReady ?? status === "ready";
     const tailReady = job.tailReady ?? archiveReady;
     return { key, kind, scene, language: job.language ?? "zh", side: job.side ?? null, status, error, generationMs, seed: job.seed ?? null,
-      playable, archiveReady, tailReady, timings: job.timings ?? null,
+      playable, streamable, archiveReady, tailReady, timings: job.timings ?? null,
       retryable: Boolean(job.retryable), errorCode: job.errorCode ?? null,
+      failure: job.failure ?? null, regenerationCount: job.paid?.attempt ?? job.regenerationCount ?? 0,
       retryAfterMs: Math.max(0, (job.retryAt ?? 0) - Date.now()),
-      videoUrl: playable ? `/api/scene-videos/${key}/media.mp4` : null,
+      videoUrl: playable || streamable ? `/api/scene-videos/${key}/media.mp4` : null,
+      fallbackVideoUrl: streamable ? job.archive?.videoUrl ?? null : null,
       tailUrl: playable && tailReady ? `/api/scene-videos/${key}/tail.jpg` : null };
   }
 
@@ -125,6 +145,11 @@ export class SceneVideoService {
       this.jobs.set(key, saved);
       return this.snapshot(saved);
     } catch { return null; }
+  }
+
+  downloading(key) {
+    const job = this.jobs.get(key);
+    return job && this.snapshot(job).streamable ? job.stream : null;
   }
 
   create(input, credentials) {
@@ -215,11 +240,20 @@ export class SceneVideoService {
         }
       } catch (error) { if (error.name === "AbortError" || error.code === "OBSOLETE_SCENE_CACHE") throw error; }
       const directory = join(this.directory, job.key);
-      // Reconcile the paid journal BEFORE consulting a possibly expired attack
-      // tail. Failed cached jobs never fall through to another paid submission.
-      const paid = job.paid ?? await optionalJson(join(directory, "submission.json"));
+      // Reconcile journals BEFORE consulting a possibly expired attack tail.
+      // A retry has its own exclusive intent file; the original receipt stays.
+      const paid = await readSubmission(directory);
+      job.paid = paid;
+      let attempt = paid?.attempt ?? 0;
       let archive, rawVideo;
-      if (paid) {
+      if (paid?.status === "failed") {
+        validateFailedSubmission(paid, job);
+        if (!paid.failure.regenerable || attempt >= 1) {
+          throw Object.assign(new Error(falVideoFailureMessage(paid.failure)), { failure: paid.failure });
+        }
+        attempt++;
+      }
+      if (paid && paid.status !== "failed") {
         validatePaidScene(paid, job);
         job.paid = paid;
         job.seed = paid.seed ?? null;
@@ -237,7 +271,8 @@ export class SceneVideoService {
         if (signal.aborted) throw abortError();
         job.status = "generating";
       } else {
-        if (job.recoverOnly) throw recoveryError("NO_PAID_SUBMISSION");
+        if (job.recoverOnly && !paid) throw recoveryError("NO_PAID_SUBMISSION");
+        job.archive = null;
       let sourceFrame = null;
       if (job.kind === "sendout") {
         const recall = await this.get(job.sourceKey);
@@ -262,18 +297,24 @@ export class SceneVideoService {
       await mkdir(directory, { recursive: true });
       // Write intent BEFORE a paid submit. If the process dies at any point,
       // another process must not buy the same clip again without reconciliation.
+      if (signal.aborted) throw abortError();
+      job.seed = FAL_VIDEO_SEED;
+      job.failure = null;
+      const intent = { key: job.key, kind: job.kind, language: job.language, seed: job.seed, attempt, status: "submitting", createdAt: Date.now() };
       try {
-        await this.writeSubmission(join(directory, "submission.json"), JSON.stringify({ key: job.key, kind: job.kind, seed: job.seed, status: "submitting", createdAt: Date.now() }), { flag: "wx" });
+        await this.writeSubmission(submissionPath(directory, attempt), JSON.stringify(intent), { flag: "wx" });
       } catch (error) {
         if (error.code === "EEXIST") throw recoveryError("UNCONFIRMED_SUBMISSION");
         throw error;
       }
+      job.paid = intent;
       if (signal.aborted) throw abortError();
       job.runway = this.runwayFactory({
         resolution: "480P",
+        maxRegenerations: 0, // The disk journal owns the entire scene retry budget.
         submittedSink: async ({ clip }) => {
-          job.paid = { key: job.key, kind: job.kind, language: job.language, seed: job.seed, status: "submitted", requestId: clip.requestId, model: clip.model, createdAt: Date.now() };
-          await atomicArtifact(join(directory, "submission.json"), JSON.stringify(job.paid));
+          job.paid = { ...intent, status: "submitted", requestId: clip.requestId, model: clip.model };
+          await atomicArtifact(submissionPath(directory, attempt), JSON.stringify(job.paid));
         },
         clipSink: ({ clip }) => { archive = clip; },
       });
@@ -290,7 +331,7 @@ export class SceneVideoService {
         const current = job.runway.get(session.id);
         if (!["generating", "cancelling"].includes(current.status)) {
           if (signal.aborted) throw abortError();
-          if (current.status !== "ready") throw new Error("场景视频生成失败");
+          if (current.status !== "ready") throw Object.assign(new Error(current.clips[0]?.error || "场景视频生成失败"), { failure: current.clips[0]?.failure });
           archive ??= current.clips[0];
           break;
         }
@@ -302,8 +343,10 @@ export class SceneVideoService {
       const downloadStart = performance.now();
       if (!rawVideo) {
         await this.writeArtifact(join(directory, "result.json"), JSON.stringify(archive));
-        rawVideo = Buffer.from(await downloadVideo(archive.videoUrl, { fetchImpl: this.fetchImpl,
-          signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]) }));
+        const options = { fetchImpl: this.fetchImpl, signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]) };
+        rawVideo = job.kind === "recovery"
+          ? await downloadRecoveryVideo(job, archive.videoUrl, options, started)
+          : Buffer.from(await downloadVideo(archive.videoUrl, options));
         if (signal.aborted) throw abortError();
         // Publish the checksum only AFTER the complete raw file is saved.
         await this.writeArtifact(join(directory, "generation.mp4"), rawVideo);
@@ -365,21 +408,72 @@ export class SceneVideoService {
       delete job.tailBytes;
       job.status = "ready";
     } catch (error) {
+      if (!signal.aborted && error.failure?.confirmed && job.paid) {
+        // Persist the proof before allowing a new paid POST. Never replace an
+        // ambiguous intent, and never turn local download/processing errors into
+        // generation failures. Each attempt writes only its own receipt.
+        const failed = { ...job.paid, status: "failed", failure: error.failure };
+        try {
+          await this.writeArtifact(submissionPath(join(this.directory, job.key), failed.attempt), JSON.stringify(failed));
+          job.paid = failed;
+          job.failure = error.failure;
+          if (failed.failure.regenerable && failed.attempt < 1 && !signal.aborted) {
+            job.status = "generating";
+            job.archive = null;
+            return await this.run(job, credentials);
+          }
+        } catch (writeError) { error = writeError; }
+      }
       // A completed media file remains useful if its diagnostic archive fails.
+      job.failure = error.failure ?? null;
       job.status = signal.aborted ? "cancelled" : job.playable ? "ready" : "error";
       const terminal = ["NO_PAID_SUBMISSION", "UNCONFIRMED_SUBMISSION", "OBSOLETE_SCENE_CACHE", "PAID_TASK_UNAVAILABLE"];
-      job.errorCode = terminal.includes(error.code) || error.code === "ENOSPC" ? error.code : "SCENE_PREPARATION_FAILED";
-      job.retryable = job.status === "error" && Boolean(job.paid) && !terminal.includes(error.code)
+      job.errorCode = error.failure?.confirmed ? (job.paid?.attempt >= 1 && error.failure.regenerable ? "FAL_REGENERATION_EXHAUSTED" : error.failure.code)
+        : terminal.includes(error.code) || error.code === "ENOSPC" ? error.code : "SCENE_PREPARATION_FAILED";
+      job.retryable = job.status === "error" && job.paid?.status === "submitted" && !error.failure?.confirmed && !terminal.includes(error.code)
         && ![400, 401, 403, 404, 422].includes(error.status ?? error.statusCode);
       job.retryAt = Date.now() + this.retryDelayMs;
-      job.error = signal.aborted ? "已取消场景生成" : job.playable
+      job.error = signal.aborted ? "已取消场景生成" : error.failure?.confirmed
+        ? `${falVideoFailureMessage(error.failure)}${job.errorCode === "FAL_REGENERATION_EXHAUSTED" ? "；自动重新生成一次仍失败，已停止重试" : ""}` : job.playable
         ? "视频可播放，尾帧或归档未完成；不会自动重新付费生成"
         : job.retryable ? "已付费素材准备失败，将仅恢复原任务，不重新生成收费"
           : "场景素材未准备好，保留本地战场；不会自动重新付费生成";
     } finally {
       delete job.tailPromise;
+      delete job.stream;
     }
   }
+}
+
+// Recovery has no loop or audio transformation, so its original bytes may be
+// buffered before the full file/manifest exists. Other scene kinds keep their
+// existing publication gate. Readers disconnect independently of this download.
+function downloadRecoveryVideo(job, url, options, started) {
+  const entry = { readers: 0, chunks: [], listeners: new Set(), settled: false, available: false };
+  let resolveHeaders, rejectHeaders;
+  entry.headers = new Promise((resolve, reject) => { resolveHeaders = resolve; rejectHeaders = reject; });
+  entry.headers.catch(() => {});
+  job.stream = entry;
+  const downloadStarted = performance.now();
+  entry.bytes = downloadVideo(url, { ...options,
+    onHeaders: size => { entry.contentLength = size; job.timings.mediaHeadersMs = Math.round(performance.now() - downloadStarted); resolveHeaders(size); },
+    onChunk: chunk => {
+      entry.chunks.push(chunk);
+      job.timings.mediaFirstByteMs ??= Math.round(performance.now() - downloadStarted);
+      if (entry.contentLength) {
+        entry.available = true;
+        job.timings.streamReadyMs ??= Math.round(performance.now() - started);
+      }
+      for (const notify of entry.listeners) notify();
+    },
+  }).then(bytes => Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+    .catch(error => { entry.error = error; rejectHeaders(error); throw error; })
+    .finally(() => {
+      entry.settled = true;
+      for (const notify of entry.listeners) notify();
+      if (!entry.readers) entry.chunks = [];
+    });
+  return entry.bytes;
 }
 
 function obsoleteAttackCache(saved) {

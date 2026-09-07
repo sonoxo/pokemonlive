@@ -615,6 +615,11 @@ async function pollAttackVideoClip(run, index) {
 
 async function requestAndPlayAttackVideos(storyboard, attacks, epoch, turn, run, cursor, prefetched = null) {
   const signal = run.controller.signal;
+  const recoveryController = new AbortController();
+  const abortRecovery = () => recoveryController.abort();
+  signal.addEventListener("abort", abortRecovery, { once: true });
+  if (signal.aborted) abortRecovery();
+  let recoveryCompleted = false;
   const sequence = storyboard.plan.turn.sequence;
   run.mark("storyboard_ready");
   try {
@@ -639,11 +644,11 @@ async function requestAndPlayAttackVideos(storyboard, attacks, epoch, turn, run,
       if (!recoveryRequest) {
         run.mark("recovery_requested");
         recoveryRequest = requestSceneVideo({ kind: "recovery", ...recoveryState, language: run.language,
-          sourceAttack: { sessionId: run.sessionId, clipIndex: sequence.length - 1 } }, signal).then(job => {
+          sourceAttack: { sessionId: run.sessionId, clipIndex: sequence.length - 1 } }, recoveryController.signal).then(job => {
           if (job.kind !== "recovery" || visualSceneKey(job.scene) !== visualSceneKey(recoveryState.scene)) throw new Error("收尾阵容不匹配");
           recoveryJob = job;
           run.mark("recovery_ready");
-          return { clip: { index: sequence.length, localVideoUrl: job.videoUrl }, session: null };
+          return { clip: { index: sequence.length, localVideoUrl: job.videoUrl, videoUrl: job.fallbackVideoUrl }, session: null };
         });
         // Generation may fail before the attack ends and the consumer awaits it.
         recoveryRequest.catch(() => {});
@@ -743,6 +748,7 @@ async function requestAndPlayAttackVideos(storyboard, attacks, epoch, turn, run,
     });
     await recoveryPlayback.started;
     await recoveryPlayback.ended;
+    recoveryCompleted = true;
     heldFrame = { video: recovered.value.video, sceneKey: visualSceneKey(recoveryState.scene), sceneAnchorKey: recoveryJob.key };
     run.mark("recovery_ended");
     run.mark("complete");
@@ -756,7 +762,11 @@ async function requestAndPlayAttackVideos(storyboard, attacks, epoch, turn, run,
     }
   } finally {
     prefetched?.controller.abort();
+    // Normal playback may finish via CDN while its local archive is still
+    // downloading. Only skip/restart/failure may cancel that paid asset.
+    if (recoveryCompleted) signal.removeEventListener("abort", abortRecovery);
     run.controller.abort();
+    signal.removeEventListener("abort", abortRecovery);
     run.releaseCommandAssets?.();
     if (cinemaRun === run) battleNarrator.stop();
     if (run.sessionId) {

@@ -49,7 +49,7 @@ export class AttackVideoPlayer {
       // CDN remains a single bounded fallback, not a second eager download.
       const item = { clip, session, video, source: clip.localVideoUrl ? "local" : "cdn", tried: new Set() };
       try {
-        await this.buffer(item, clip.localVideoUrl || clip.videoUrl, item.source, 8000);
+        await this.buffer(item, clip.localVideoUrl || clip.videoUrl, item.source, clip.rangeOnly ? 45000 : 8000);
       } catch (error) {
         if (this.signal.aborted || !this.fallback(item)) throw error;
         this.mark(`${item.source}_buffer_fallback`, index);
@@ -77,7 +77,7 @@ export class AttackVideoPlayer {
   }
 
   fallback(item) {
-    if (!item.tried.has("cdn") && item.clip.videoUrl) return { name: "cdn", url: item.clip.videoUrl };
+    if (!item.clip.rangeOnly && !item.tried.has("cdn") && item.clip.videoUrl) return { name: "cdn", url: item.clip.videoUrl };
     if (!item.tried.has("local") && item.clip.localVideoUrl) return { name: "local", url: item.clip.localVideoUrl };
     return null;
   }
@@ -93,8 +93,8 @@ export class AttackVideoPlayer {
         if (this.signal.aborted) throw aborted();
         const playback = playVideo(item.video, previous, this.signal, {
           startTime, onTime, onBlocked,
-          stallTimeoutMs: 8000,
-          frameTimeoutMs: 8000,
+          stallTimeoutMs: item.clip.rangeOnly ? 45000 : 8000,
+          frameTimeoutMs: item.clip.rangeOnly ? 45000 : 8000,
           onStall: (name, value) => this.mark(name, item.clip.index, Math.round(value)),
           onFrame: () => {
             this.release(previous);

@@ -15,9 +15,11 @@ import { SPECIES } from "./src/data.js";
 import { FalVideoRunway, FAL_VIDEO_RESOLUTIONS } from "./src/fal-video-runway.js";
 import { SceneVideoService, sceneVideoSpec, SCENE_VIDEO_KEY } from "./src/scene-video-service.js";
 import { attackVisualScene, visualSceneKey, validateSwitch } from "./src/visual-battle-state.js";
-import { extractVideoTailFrame } from "./src/video-tail-frame.js";
-import { loadAttackSceneAnchor, sceneAfterBeat } from "./src/attack-scene-anchor.js";
+import { downloadVideo } from "./src/video-tail-frame.js";
+import { CloudTailFrames } from "./src/cloud-tail-frame.js";
+import { loadAttackSceneAnchor, loadArchivedAttackTail, sceneAfterBeat, ATTACK_TAIL_URL_TTL_MS } from "./src/attack-scene-anchor.js";
 import { VideoMediaCache } from "./src/video-media-cache.js";
+import { supportsTailRange } from "./src/video-tail-range.js";
 import { sendLocalVideo, sendDownloadingVideo } from "./src/local-video-response.js";
 import { SpeechCache } from "./src/minimax-speech.js";
 import { buildDeepSeekMessages, normalizeCompactStoryboard } from "./src/compact-storyboard.js";
@@ -32,7 +34,9 @@ const REFERENCE_IMAGE_LIMIT = 512 * 1024;
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEFAULT_MODEL = "deepseek-v4-flash";
 const attackContinuity = new Map();
-const attackMedia = new VideoMediaCache();
+const attackMedia = new VideoMediaCache({ extractRangeTail: false });
+const attackTailFrames = new CloudTailFrames({ loadCredentials: loadFalKey,
+  metricSink: metric => console.info(`[attack-tail-metric] ${JSON.stringify(metric)}`) });
 const sceneVideos = new SceneVideoService({
   directory: join(PROJECT_ROOT, ".local", "scene-videos"),
   loadAttackAnchor: (source, scene, signal, recoveryHealth) => loadAttackSceneAnchor(source, scene, signal, {
@@ -59,10 +63,7 @@ const FAL_RESOLUTION = FAL_VIDEO_RESOLUTIONS.has(process.env.FAL_VIDEO_RESOLUTIO
   : "480P";
 const attackVideoRunway = new FalVideoRunway({
   resolution: FAL_RESOLUTION,
-  tailFrameExtractor: (url, options) => attackMedia.tail(url, options),
-  // Inline the small JPEG in the next fal request, avoiding a separate storage
-  // upload and subsequent CDN fetch on the critical continuation path.
-  tailFrameUploader: async (_client, frame) => `data:image/jpeg;base64,${Buffer.from(await frame.arrayBuffer()).toString("base64")}`,
+  tailFrameExtractor: (url, options) => attackTailFrames.url(url, options),
   metricSink: (metric) => console.info(`[attack-video-metric] ${JSON.stringify(metric)}`),
   clipSink: archiveAttackClip,
 });
@@ -70,29 +71,41 @@ const attackVideoRunway = new FalVideoRunway({
 export async function archiveAttackClip({ session, clip, prompt }, {
   cache = attackMedia, continuity = attackContinuity.get(session.id)?.clips[clip.index],
   directory = join(PROJECT_ROOT, ".local", "runs", session.id), writeArtifact = writeCompleteMedia,
+  tailFrames = attackTailFrames,
+  fetchTail = url => downloadVideo(url, { maxBytes: 3 * 1024 * 1024, signal: AbortSignal.timeout(15000) }),
 } = {}) {
-    let media;
-    try { media = cache.pin(clip.videoUrl); }
-    catch (error) { continuity?.resolveTail(null); throw error; }
-    const tail = cache.tail(clip.videoUrl).then(async frame => {
-      const bytes = Buffer.from(await frame.arrayBuffer());
-      continuity?.resolveTail(`data:image/jpeg;base64,${bytes.toString("base64")}`);
-      return bytes;
+    const tailStarted = performance.now();
+    let media, tailReadyMs;
+    // Also extract the final clip for recovery/state prewarm. This shares the
+    // continuation request and is independent of media-cache/disk failures.
+    const tail = tailFrames.url(clip.videoUrl).then(url => {
+      tailReadyMs = Math.round(performance.now() - tailStarted);
+      if (continuity) continuity.tailExpiresAt = Date.now() + ATTACK_TAIL_URL_TTL_MS;
+      continuity?.resolveTail(url);
+      return url;
     });
     tail.catch(() => continuity?.resolveTail(null));
     try {
-      // These writes do not gate the shared tail or same-origin playback.
+      media = cache.pin(clip.videoUrl);
       await mkdir(directory, { recursive: true });
       const writes = await Promise.allSettled([
         writeFile(join(directory, `clip-${clip.index}.json`), JSON.stringify({ ...clip, prompt }, null, 2)),
         media.bytes.then(bytes => writeArtifact(join(directory, `clip-${clip.index}.mp4`), bytes)),
-        tail.then(bytes => writeArtifact(join(directory, `clip-${clip.index}-tail.jpg`), bytes)),
+        tail.then(async url => {
+          await writeArtifact(join(directory, `clip-${clip.index}-tail.json`), JSON.stringify({ url, createdAt: Date.now() }));
+          // Persistence only: do not compete with this video's playback download
+          // for the JPEG. Continuation already received the cloud URL above.
+          await media.bytes.catch(() => {});
+          const bytes = await fetchTail(url);
+          await writeArtifact(join(directory, `clip-${clip.index}-tail.jpg`), bytes);
+        }),
       ]);
+      await writeFile(join(directory, `clip-${clip.index}-media.json`), JSON.stringify({ ...media.timings,
+        tailSource: "cloud", tailReadyMs: tailReadyMs ?? null, cloudTailMs: tailReadyMs ?? null }));
       const failed = writes.find(result => result.status === "rejected");
       if (failed) throw failed.reason;
-      await writeFile(join(directory, `clip-${clip.index}-media.json`), JSON.stringify(media.timings));
       cache.release(clip.videoUrl);
-    } finally { await tail.catch(() => {}); cache.unpin(clip.videoUrl); }
+    } finally { await tail.catch(() => {}); if (media) cache.unpin(clip.videoUrl); }
 }
 
 async function writeCompleteMedia(path, bytes) {
@@ -456,29 +469,27 @@ async function handleAttackVideoCreate(request, response) {
   }
 }
 
-export async function loadAttackContinuation(id, scene) {
+export async function loadAttackContinuation(id, scene, {
+  continuity = attackContinuity, runway = attackVideoRunway, runsDirectory = join(PROJECT_ROOT, ".local", "runs"),
+} = {}) {
   if (!/^[0-9a-f-]{36}$/i.test(id ?? "")) return null;
-  const previous = attackContinuity.get(id);
-  if (previous) {
-    if (attackVideoRunway.get(id)?.status !== "ready" || visualSceneKey(previous.scene) !== visualSceneKey(scene)) return null;
-    return previous.tail; // This promise exists before generation begins.
+  const previous = continuity.get(id);
+  const session = previous ? runway.get(id) : null;
+  if (previous && session) {
+    if (session.status !== "ready" || visualSceneKey(previous.scene) !== visualSceneKey(scene)) return null;
+    const final = previous.clips.at(-1);
+    if (!final.tailExpiresAt || Date.now() < final.tailExpiresAt) return final.tail;
   }
   // Reuse an already-paid, locally archived final frame after a server restart.
   // Only server-produced records and media under the UUID directory are read.
   try {
-    const directory = join(PROJECT_ROOT, ".local", "runs", id);
+    const directory = join(runsDirectory, id);
     const saved = JSON.parse(await readFile(join(directory, "plan.json"), "utf8"));
     const attacks = sanitizeAttackRecords(saved.attacks);
     if (visualSceneKey(attackVisualScene(attacks.at(-1), true)) !== visualSceneKey(scene)) return null;
     const index = saved.plan.turn.sequence.length - 1;
     if (!Number.isInteger(index) || index < 0 || index > 3) return null;
-    try {
-      const tail = await readFile(join(directory, `clip-${index}-tail.jpg`));
-      return `data:image/jpeg;base64,${tail.toString("base64")}`;
-    } catch (error) { if (error.code !== "ENOENT") throw error; }
-    const bytes = await readFile(join(directory, `clip-${index}.mp4`));
-    const frame = await extractVideoTailFrame("http://127.0.0.1/archived.mp4", { fetchImpl: async () => new Response(bytes) });
-    return `data:image/jpeg;base64,${Buffer.from(await frame.arrayBuffer()).toString("base64")}`;
+    return await loadArchivedAttackTail(directory, index);
   } catch { return null; }
 }
 
@@ -499,9 +510,9 @@ function handleAttackVideoStatus(response, sessionId) {
 export function playbackSession(session) {
   if (!session) return session;
   return { ...session, clips: session.clips.map(clip => ({ ...clip,
-    // Prefer the same-origin shared stream/archive to avoid downloading each
-    // MP4 twice. CDN is a media-only fallback; neither route buys generation.
+    // Range-only fal media must not open a competing browser CDN download.
     localVideoUrl: clip.videoUrl ? `/api/attack-videos/${session.id}/clips/${clip.index}.mp4` : null,
+    rangeOnly: supportsTailRange(clip.videoUrl),
   })) };
 }
 
@@ -580,7 +591,7 @@ async function serveStatic(request, response, pathname) {
   }
 }
 
-export async function handleHttpRequest(request, response) {
+export async function handleHttpRequest(request, response, sceneService = sceneVideos) {
   const url = new URL(request.url, "http://localhost");
   if (url.pathname === "/api/battle-speech" && request.method === "POST") {
     if (!hasTrustedOrigin(request) || !acceptsJson(request)) { jsonResponse(response, 403, { ok: false }); return; }
@@ -602,16 +613,16 @@ export async function handleHttpRequest(request, response) {
     if (!hasTrustedOrigin(request) || !acceptsJson(request)) { jsonResponse(response, 403, { ok: false }); return; }
     let key;
     let disconnected = false;
-    response.once("close", () => { if (!response.writableEnded) { disconnected = true; if (key) sceneVideos.cancel(key); } });
+    response.once("close", () => { if (!response.writableEnded) { disconnected = true; if (key) sceneService.cancel(key); } });
     try {
       const body = await readJsonBody(request);
       const spec = sceneVideoSpec(body);
-      const cached = await sceneVideos.get(spec.key);
+      const cached = await sceneService.get(spec.key);
       if (cached?.status === "ready") { jsonResponse(response, 200, { ok: true, job: cached }); return; }
       const credentials = await loadFalKey();
       if (!credentials) { jsonResponse(response, 503, { ok: false, error: "服务端未配置 FAL_KEY" }); return; }
       if (disconnected) return;
-      const job = sceneVideos.create(body, credentials);
+      const job = sceneService.create(body, credentials);
       key = job.key;
       jsonResponse(response, 202, { ok: true, job });
     } catch (error) { if (!disconnected) jsonResponse(response, error.statusCode ?? 400, { ok: false, error: error.message }); }
@@ -621,13 +632,17 @@ export async function handleHttpRequest(request, response) {
   if (sceneRoute && ["GET", "HEAD", "DELETE"].includes(request.method)) {
     if (!hasTrustedOrigin(request)) { jsonResponse(response, 403, { ok: false }); return; }
     const [, key, media] = sceneRoute;
-    const job = await sceneVideos.get(key);
+    const job = await sceneService.get(key);
     if (!job) { jsonResponse(response, 404, { ok: false }); return; }
     if (!media) {
-      if (request.method === "DELETE") sceneVideos.cancel(key);
-      jsonResponse(response, 200, { ok: true, job: await sceneVideos.get(key) });
+      if (request.method === "DELETE") sceneService.cancel(key);
+      jsonResponse(response, 200, { ok: true, job: await sceneService.get(key) });
+    } else if (media === "media.mp4" && job.streamable && !job.playable && request.method !== "DELETE") {
+      const entry = sceneService.downloading(key);
+      if (entry) await sendDownloadingVideo(request, response, entry);
+      else jsonResponse(response, 409, { ok: false });
     } else if ((job.playable || job.status === "ready") && (media === "media.mp4" || job.tailReady) && request.method !== "DELETE") {
-      const path = join(PROJECT_ROOT, ".local", "scene-videos", key, media);
+      const path = join(sceneService.directory, key, media);
       try {
         await sendLocalVideo(request, response, { path, contentType: MIME_TYPES[extname(media)] });
       } catch { response.writeHead(404).end(); }
@@ -703,8 +718,8 @@ export async function handleHttpRequest(request, response) {
   response.writeHead(405, { Allow: "GET, HEAD, POST, DELETE" }).end("Method not allowed");
 }
 
-export function createAppServer() {
-  return createHttpServer(handleHttpRequest);
+export function createAppServer({ sceneService = sceneVideos } = {}) {
+  return createHttpServer((request, response) => handleHttpRequest(request, response, sceneService));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
