@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "id": "repo:sonoxo/pokemonlive",
+  "name": "pokemonlive",
+  "moduleId": "gpt-doug-llm:pokemonlive",
+  "system": "gpt-doug-llm",
+  "domain": "interactive-ai-game",
+  "repository": "https://github.com/sonoxo/pokemonlive",
+  "defaultBranch": "main",
+  "ontology": "ontology/pokemonlive.ontology.json",
+  "adapter": "src/gpt-doug-llm.js",
+  "capabilities": [
+    "battle-context-read",
+    "presentation-orchestration",
+    "storyboard-context",
+    "media-pipeline-observability",
+    "ontology-registration"
+  ],
+  "governance": {
+    "battleOutcomeAuthority": "rules-engine",
+    "agentAuthority": "presentation-orchestration-only",
+    "mayMutateBattleOutcome": false,
+    "mayDeclareWinner": false,
+    "externalSecretsClientSide": false
+  },
+  "checks": [
+    "npm test",
+    "npm run gpt-doug:check"
+  ]
+}
