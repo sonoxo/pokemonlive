@@ -29,15 +29,6 @@ export async function sendDownloadingVideo(request, response, entry) {
       ...(range ? { "Content-Range": `bytes ${start}-${end}/${size}` } : {}),
     });
     if (request.method === "HEAD") { response.end(); return; }
-    if (entry.readRange) {
-      // Sparse tail bytes are not sequential chunks. Read exact offsets from
-      // the shared Range cache, filling only holes the player actually needs.
-      for (let offset = start; offset <= end; offset += 256 * 1024) {
-        const bytes = await entry.readRange(offset, Math.min(end, offset + 256 * 1024 - 1), controller.signal);
-        if (!response.write(bytes)) await waitForDrain(response, controller.signal);
-      }
-      response.end(); return;
-    }
     let index = 0, offset = 0;
     while (!controller.signal.aborted) {
       while (index < entry.chunks.length) {

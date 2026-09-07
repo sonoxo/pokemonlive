@@ -45,11 +45,11 @@ export class AttackVideoPlayer {
       const { clip, session } = await this.waitForClip(index);
       if (this.signal.aborted) throw aborted();
       const video = await this.acquire();
-      // Share the server's already-running download/tail/archive connection.
-      // CDN remains a single bounded fallback, not a second eager download.
+      // Share the server's already-running download/archive connection.
+      // Only other scene media may use the bounded CDN fallback.
       const item = { clip, session, video, source: clip.localVideoUrl ? "local" : "cdn", tried: new Set() };
       try {
-        await this.buffer(item, clip.localVideoUrl || clip.videoUrl, item.source, clip.rangeOnly ? 45000 : 8000);
+        await this.buffer(item, clip.localVideoUrl || clip.videoUrl, item.source, clip.sharedDownloadOnly ? 45000 : 8000);
       } catch (error) {
         if (this.signal.aborted || !this.fallback(item)) throw error;
         this.mark(`${item.source}_buffer_fallback`, index);
@@ -77,7 +77,7 @@ export class AttackVideoPlayer {
   }
 
   fallback(item) {
-    if (!item.clip.rangeOnly && !item.tried.has("cdn") && item.clip.videoUrl) return { name: "cdn", url: item.clip.videoUrl };
+    if (!item.clip.sharedDownloadOnly && !item.tried.has("cdn") && item.clip.videoUrl) return { name: "cdn", url: item.clip.videoUrl };
     if (!item.tried.has("local") && item.clip.localVideoUrl) return { name: "local", url: item.clip.localVideoUrl };
     return null;
   }
@@ -93,8 +93,8 @@ export class AttackVideoPlayer {
         if (this.signal.aborted) throw aborted();
         const playback = playVideo(item.video, previous, this.signal, {
           startTime, onTime, onBlocked,
-          stallTimeoutMs: item.clip.rangeOnly ? 45000 : 8000,
-          frameTimeoutMs: item.clip.rangeOnly ? 45000 : 8000,
+          stallTimeoutMs: item.clip.sharedDownloadOnly ? 45000 : 8000,
+          frameTimeoutMs: item.clip.sharedDownloadOnly ? 45000 : 8000,
           onStall: (name, value) => this.mark(name, item.clip.index, Math.round(value)),
           onFrame: () => {
             this.release(previous);

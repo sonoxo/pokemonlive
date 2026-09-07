@@ -66,32 +66,32 @@ test("云端失败/非法输出/超时不自动重发付费POST；取消前不�
   now = 11; await bounded.url(videoUrl); assert.equal(count, 2);
 });
 
-test("生产媒体模式立即补齐Range，只用于播放归档，不启动两种本地提帧器", async () => {
-  const requests = [], bytes = Buffer.alloc(2 * 1024 * 1024, 7); let extracts = 0;
-  const cache = new VideoMediaCache({ extractRangeTail: false,
-    tailExtractor: () => { extracts++; throw new Error("local disabled"); }, rangeTailExtractor: () => { extracts++; throw new Error("local disabled"); },
+test("生产媒体只发一次普通GET用于播放归档，不启动本地提帧", async () => {
+  const requests = [], bytes = Buffer.alloc(2 * 1024 * 1024, 7);
+  const cache = new VideoMediaCache({
     fetchImpl: async (_url, options) => {
-      const [start, end] = options.headers.Range.match(/\d+/g).map(Number), last = Math.min(end, bytes.length - 1);
-      requests.push([start, last]);
-      return new Response(bytes.subarray(start, last + 1), { status: 206, headers: { "content-range": `bytes ${start}-${last}/${bytes.length}`, etag: '"v1"' } });
+      requests.push(options);
+      assert.equal(options.headers?.Range, undefined);
+      assert.equal(options.redirect, "error");
+      return new Response(bytes, { headers: { "content-length": String(bytes.length) } });
     } });
   const media = cache.pin(videoUrl);
-  assert.deepEqual(await media.readRange(0, 1023), bytes.subarray(0, 1024));
-  assert.deepEqual(await cache.bytes(videoUrl), bytes); assert.equal(extracts, 0);
-  assert.equal(media.tail, undefined); assert.equal(media.tailWork, undefined);
-  await assert.rejects(cache.tail(videoUrl), /LOCAL_TAIL_EXTRACTION_DISABLED/); assert.equal(extracts, 0);
-  assert.equal(media.timings.downloadMode, "range-only");
-  assert.equal(requests.reduce((n, [s, e]) => n + e - s + 1, 0), bytes.length);
+  assert.equal(media.readRange, undefined);
+  assert.deepEqual(await cache.bytes(videoUrl), bytes);
+  assert.equal(cache.tail, undefined); assert.equal(cache.tailExtractor, undefined);
+  assert.equal(media.tail, undefined);
+  assert.equal(media.timings.downloadMode, "single-get");
+  assert.equal(media.timings.downloadRequests, 1);
+  assert.equal(requests.length, 1);
   cache.unpin(videoUrl);
 });
 
 test("真实跑道与归档共享云端尾帧：下载/图片/落盘未完成时已提交下段；末段也交付锚点", { timeout: 2000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), "pokemon-cloud-")); t.after(() => rm(directory, { recursive: true, force: true }));
   const download = defer(), jpeg = defer(), cloud = defer(), second = defer(), continuity = [defer(), defer()];
-  let posts = 0, uploads = 0, imageDownloads = 0, localExtracts = 0; const inputs = [], archives = [];
+  let posts = 0, uploads = 0, imageDownloads = 0; const inputs = [], archives = [];
   const tails = new CloudTailFrames({ loadCredentials: async () => "test", fetchImpl: async () => { posts++; await cloud.promise; return result(); } });
-  const cache = new VideoMediaCache({ extractRangeTail: false, fetchImpl: async () => { await download.promise; return new Response("video"); },
-    tailExtractor: () => { localExtracts++; throw new Error("disabled"); }, rangeTailExtractor: () => { localExtracts++; throw new Error("disabled"); } });
+  const cache = new VideoMediaCache({ fetchImpl: async () => { await download.promise; return new Response("video"); } });
   const runway = new FalVideoRunway({ clientFactory: () => ({ storage: { upload: async () => { uploads++; throw new Error("no upload"); } }, queue: {
     async submit(_model, { input }) { inputs.push(input); if (inputs.length === 2) second.resolve(); return { request_id: `test-${inputs.length}` }; },
     async subscribeToStatus() {}, async result(_model, { requestId }) { return { data: { video: { url: `https://example.com/${requestId}.mp4` } } }; },
@@ -106,7 +106,7 @@ test("真实跑道与归档共享云端尾帧：下载/图片/落盘未完成时
   assert.equal(await continuity[0].promise, imageUrl); assert.equal(await continuity[1].promise, imageUrl);
   assert.equal(posts, 2, "两段各买一次提帧，归档与续段去重");
   assert.equal(imageDownloads, 0, "归档图片尚未下载但下一段已经生成");
-  assert.equal(localExtracts, 0); assert([...cache.entries.values()].every(entry => !entry.settled));
+  assert([...cache.entries.values()].every(entry => !entry.settled));
   download.resolve(); await tick(); jpeg.resolve(); await Promise.all(archives);
   assert.equal(runway.get(created.id).status, "ready"); assert.equal(imageDownloads, 2);
   assert.equal((await readFile(join(directory, "clip-1-tail.jpg"))).toString(), "jpeg");
@@ -118,7 +118,7 @@ test("归档磁盘/图片/媒体缓存失败不能清掉独立云端状态锚点
   for (const mode of ["disk", "image", "cache"]) {
     const anchor = defer(), ready = defer();
     const cache = mode === "cache" ? { pin: () => { throw new Error("cache busy"); } }
-      : new VideoMediaCache({ extractRangeTail: false, fetchImpl: async () => new Response("video") });
+      : new VideoMediaCache({ fetchImpl: async () => new Response("video") });
     const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: "https://example.com/video.mp4" } }, {
       cache, directory, continuity: { resolveTail: anchor.resolve }, tailFrames: { url: async () => { await ready.promise; return imageUrl; } },
       fetchTail: async () => { if (mode === "image") throw new Error("image failed"); return Buffer.from("tail"); },

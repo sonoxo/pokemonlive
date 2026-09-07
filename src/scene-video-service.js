@@ -97,7 +97,6 @@ export function sceneVideoSpec(input) {
   let sceneDirection = coldDirection;
   if (sourceAttack && kind !== "recovery") {
     sceneDirection = sceneDirection.replace("Use the supplied scene tail as the exact first AND last composition.", "Use the same shared TWO-character composition on the first and last frames; NEVER end on a close-up.")
-      .replace("Use the supplied scene tail on the first frame.", "Start and end with BOTH combatants in the shared battle view.")
       .replace("Use the supplied battle frame as the exact opening.", "Start with both combatants in the shared battle view.");
     if (kind === "command") sceneDirection = sceneDirection.replace("Use the supplied scene tail only for first-frame continuity, then immediately cut closer; do not spend a second on an opening wide shot.", "Begin immediately with the authored close-up in the same arena; use the attack tail for state continuity, not its camera framing.");
   }
@@ -266,7 +265,6 @@ export class SceneVideoService {
             if (bytes.length && result.rawSha256 === hashBytes(bytes)) rawVideo = bytes;
           } catch (error) { if (error.code !== "ENOENT") throw error; }
         }
-        archive ??= job.archive;
         if (!rawVideo) archive = await this.recoverClip(paid, { credentials, signal });
         if (signal.aborted) throw abortError();
         job.status = "generating";

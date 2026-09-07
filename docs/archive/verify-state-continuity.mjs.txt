@@ -1,3 +1,4 @@
+// Historical source only: the one-action assertion and four-clip budget are obsolete.
 // Explicitly bounded paid QA: sleep -> next-turn sleep -> one KO, plus one
 // reusable entrance. Reruns resume saved session IDs; never silently regenerate.
 import assert from "node:assert/strict";

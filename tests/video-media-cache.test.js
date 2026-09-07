@@ -10,32 +10,30 @@ import { archiveAttackClip } from "../server.mjs";
 
 const url = "https://example.com/paid.mp4";
 const defer = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
-// Keep the legacy local-cache unit coverage offline. Production injects the
-// cloud URL cache instead; its independent critical path is tested separately.
-const localArchiveTail = cache => ({
-  tailFrames: { url: async source => { const frame = await cache.tail(source); return `data:image/jpeg;base64,${Buffer.from(await frame.arrayBuffer()).toString("base64")}`; } },
-  fetchTail: async source => Buffer.from(source.split(",")[1], "base64"),
-});
+const imageUrl = "https://example.com/tail.jpg";
+// Offline cloud URL/JPEG stand-ins; never call a provider from these tests.
+const cloudArchiveTail = {
+  tailFrames: { url: async () => imageUrl },
+  fetchTail: async () => Buffer.from("tail"),
+};
 
-test("归档、续段、状态预热、播放器共享一次下载及一次抽帧，归档未完成不挡尾帧", async t => {
+test("归档和播放器共享一次下载，下载和落盘未完成不挡云端尾帧", async t => {
   const directory = await mkdtemp(join(tmpdir(), "pokemon-media-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const download = defer(), disk = defer(), continuity = defer();
-  let downloads = 0, extracts = 0, archived = false;
-  const cache = new VideoMediaCache({ fetchImpl: async () => { downloads++; await download.promise; return new Response("paid video"); },
-    tailExtractor: async (_url, { fetchImpl }) => { extracts++; assert.equal(await (await fetchImpl()).text(), "paid video"); return new Blob(["tail"]); } });
+  let downloads = 0, archived = false;
+  const cache = new VideoMediaCache({ fetchImpl: async () => { downloads++; await download.promise; return new Response("paid video"); } });
   const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: url }, prompt: "test" }, {
-    directory, cache, ...localArchiveTail(cache), continuity: { resolveTail: continuity.resolve },
+    directory, cache, ...cloudArchiveTail, continuity: { resolveTail: continuity.resolve },
     writeArtifact: async (...args) => { await disk.promise; return writeFile(...args); },
   }).then(() => { archived = true; });
-  const continuation = cache.tail(url);
   const playback = cache.bytes(url);
+  assert.equal(await continuity.promise, imageUrl);
+  assert.equal(cache.entries.get(url).settled, false);
   download.resolve();
-  assert.equal(await (await continuation).text(), "tail");
-  assert.equal(await continuity.promise, "data:image/jpeg;base64,dGFpbA==");
   assert.equal((await playback).toString(), "paid video");
   assert.equal(archived, false);
-  assert.equal(downloads, 1); assert.equal(extracts, 1);
+  assert.equal(downloads, 1);
   disk.resolve(); await archive;
   assert.equal((await readFile(join(directory, "clip-0-tail.jpg"))).toString(), "tail");
   assert.equal(cache.entries.size, 0, "归档后不长期保留整片视频内存");
@@ -45,13 +43,14 @@ test("磁盘归档失败不会抢先把仍在提取的共享尾帧清空", async
   const directory = await mkdtemp(join(tmpdir(), "pokemon-media-fail-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const tail = defer(), continuity = defer(), diskFailed = defer();
-  const cache = new VideoMediaCache({ fetchImpl: async () => new Response("video"), tailExtractor: () => tail.promise });
+  const cache = new VideoMediaCache({ fetchImpl: async () => new Response("video") });
   const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: url } }, {
-    directory, cache, ...localArchiveTail(cache), continuity: { resolveTail: continuity.resolve }, writeArtifact: async () => { diskFailed.resolve(); throw new Error("disk full"); },
+    directory, cache, ...cloudArchiveTail, tailFrames: { url: () => tail.promise },
+    continuity: { resolveTail: continuity.resolve }, writeArtifact: async () => { diskFailed.resolve(); throw new Error("disk full"); },
   });
   await diskFailed.promise;
-  tail.resolve(new Blob(["valid tail"]));
-  assert.equal(await continuity.promise, "data:image/jpeg;base64,dmFsaWQgdGFpbA==");
+  tail.resolve(imageUrl);
+  assert.equal(await continuity.promise, imageUrl);
   await assert.rejects(archive, /disk full/);
   assert.equal((await cache.bytes(url)).toString(), "video");
 });
@@ -61,38 +60,37 @@ test("归档仍在写盘时，容量或TTL淘汰不能移走共享资源或触�
   t.after(() => rm(directory, { recursive: true, force: true }));
   const disk = defer(); let downloads = 0, now = 0;
   const cache = new VideoMediaCache({ maxCacheBytes: 4, ttlMs: 10, now: () => now,
-    fetchImpl: async () => { downloads++; return new Response("1234"); }, tailExtractor: async () => new Blob(["tail"]) });
+    fetchImpl: async () => { downloads++; return new Response("1234"); } });
   const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: url } }, {
-    cache, directory, ...localArchiveTail(cache), writeArtifact: async (...args) => { await disk.promise; return writeFile(...args); },
+    cache, directory, ...cloudArchiveTail, writeArtifact: async (...args) => { await disk.promise; return writeFile(...args); },
   });
   await cache.bytes(url);
   now = 11; await cache.bytes(`${url}?pressure`); cache.trim();
   assert(cache.entries.has(url));
   assert.equal((await cache.bytes(url)).toString(), "1234");
-  assert.equal(await (await cache.tail(url)).text(), "tail"); assert.equal(downloads, 2);
+  assert.equal(downloads, 2);
   disk.resolve(); await archive;
   assert(!cache.entries.has(url));
 });
 
-test("取消单个共享消费者立即退出，不取消下载和其它尾帧消费者", async () => {
+test("取消单个共享消费者立即退出，不取消下载和其它媒体消费者", async () => {
   const download = defer(); let downloads = 0;
-  const cache = new VideoMediaCache({ fetchImpl: async () => { downloads++; await download.promise; return new Response("video"); }, tailExtractor: async () => new Blob(["tail"]) });
+  const cache = new VideoMediaCache({ fetchImpl: async () => { downloads++; await download.promise; return new Response("video"); } });
   const controller = new AbortController();
-  const cancelled = cache.tail(url, { signal: controller.signal });
-  const surviving = cache.tail(url);
+  const cancelled = cache.bytes(url, { signal: controller.signal });
+  const surviving = cache.bytes(url);
   controller.abort(); await assert.rejects(cancelled, { name: "AbortError" });
-  download.resolve(); assert.equal(await (await surviving).text(), "tail");
+  download.resolve(); assert.equal((await surviving).toString(), "video");
   assert.equal(downloads, 1);
 });
 
-test("共享下载限制大小、拒绝非HTTPS来源；失败不重复下载或抽帧", async () => {
-  let downloads = 0, extracts = 0;
+test("共享下载限制大小、拒绝非HTTPS来源；失败不重复下载", async () => {
+  let downloads = 0;
   const cache = new VideoMediaCache({ maxVideoBytes: 4,
-    fetchImpl: async () => { downloads++; return new Response("too large"); },
-    tailExtractor: async () => { extracts++; return new Blob(); } });
+    fetchImpl: async () => { downloads++; return new Response("too large"); } });
   await assert.rejects(cache.bytes(url), /TOO_LARGE/);
-  await assert.rejects(cache.tail(url), /TOO_LARGE/);
-  assert.equal(downloads, 1); assert.equal(extracts, 0);
+  await assert.rejects(cache.bytes(url), /TOO_LARGE/);
+  assert.equal(downloads, 1);
   await assert.rejects(cache.bytes("file:///etc/passwd"), /HTTPS/);
   assert.equal(downloads, 1);
 });
@@ -132,10 +130,9 @@ class StreamingResponse extends EventEmitter {
   destroy() { this.destroyed = true; this.emit("close"); }
 }
 
-test("播放器渐进接收共享字节，不等完整下载；断开一个播放器不影响尾帧", async () => {
+test("播放器渐进接收共享字节，不等完整下载；断开一个播放器不影响其它消费者", async () => {
   let controller, downloads = 0;
-  const cache = new VideoMediaCache({ fetchImpl: async () => { downloads++; return new Response(new ReadableStream({ start(c) { controller = c; } }), { headers: { "content-length": "10" } }); },
-    tailExtractor: async (_url, { fetchImpl }) => new Blob([await (await fetchImpl()).text()]) });
+  const cache = new VideoMediaCache({ fetchImpl: async () => { downloads++; return new Response(new ReadableStream({ start(c) { controller = c; } }), { headers: { "content-length": "10" } }); } });
   const entry = cache.pin(url), a = new StreamingResponse(), b = new StreamingResponse();
   const first = deferredChunk(a), second = deferredChunk(b);
   const playing = sendDownloadingVideo({ method: "GET", headers: { range: "bytes=0-" } }, a, entry);
@@ -145,11 +142,11 @@ test("播放器渐进接收共享字节，不等完整下载；断开一个播�
   assert.equal(entry.settled, false); assert.equal(a.status, 206);
   assert.equal(Buffer.concat(a.parts).toString(), "01234");
   a.destroy(); await playing;
-  const tail = cache.tail(url);
+  const complete = cache.bytes(url);
   controller.enqueue(new TextEncoder().encode("56789")); controller.close();
   await other;
   assert.equal(Buffer.concat(b.parts).toString(), "0123456789");
-  assert.equal(await (await tail).text(), "0123456789"); assert.equal(downloads, 1);
+  assert.equal((await complete).toString(), "0123456789"); assert.equal(downloads, 1);
   assert.equal(entry.listeners.size, 0); assert.equal(entry.readers, 0); assert.equal(entry.chunks.length, 0);
 });
 
@@ -186,34 +183,37 @@ test("渐进有限 Range 不再等全片：前缀/中段按字节可用返回、
   assert.equal(entry.readers, 0); assert.equal(entry.listeners.size, 0);
 });
 
-test("共享渐进输出的下载失败关闭未完成响应，未完整数据不得拿去抽尾帧", async () => {
-  let controller, extracts = 0;
-  const cache = new VideoMediaCache({ fetchImpl: async () => new Response(new ReadableStream({ start(c) { controller = c; } }), { headers: { "content-length": "10" } }),
-    tailExtractor: async () => { extracts++; return new Blob(); } });
+test("共享渐进输出的下载失败关闭未完成响应，不发布不完整媒体", async () => {
+  let controller;
+  const cache = new VideoMediaCache({ fetchImpl: async () => new Response(new ReadableStream({ start(c) { controller = c; } }), { headers: { "content-length": "10" } }) });
   const entry = cache.pin(url), response = new StreamingResponse();
   const first = deferredChunk(response);
   const output = sendDownloadingVideo({ method: "GET", headers: {} }, response, entry);
   controller.enqueue(new TextEncoder().encode("01234")); await first;
   controller.error(new Error("network interrupted")); await output;
   assert(response.destroyed); assert.equal(response.ended, undefined);
-  await assert.rejects(cache.tail(url), /network interrupted/); assert.equal(extracts, 0);
+  await assert.rejects(cache.bytes(url), /network interrupted/);
 });
 
-test("已声明长度与实际字节不符时拒绝尾帧与完整媒体发布", async () => {
+test("已声明长度与实际字节不符时拒绝完整媒体发布", async () => {
   const cache = new VideoMediaCache({ fetchImpl: async () => new Response("short", { headers: { "content-length": "10" } }) });
   await assert.rejects(cache.bytes(url), /LENGTH_MISMATCH/);
-  await assert.rejects(cache.tail(url), /LENGTH_MISMATCH/);
+  await assert.rejects(cache.bytes(url), /LENGTH_MISMATCH/);
 });
 
-test("归档目录创建失败时仍保护共享尾帧直到提取完成", async t => {
+test("归档目录创建失败时仍等待独立云端尾帧，最终释放媒体引用", async t => {
   const directory = await mkdtemp(join(tmpdir(), "pokemon-media-mkdir-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const blocked = join(directory, "file"); await writeFile(blocked, "not a directory");
   let now = 0; const gate = defer(), entered = defer();
-  const cache = new VideoMediaCache({ ttlMs: 1, now: () => now, fetchImpl: async () => new Response("video"),
-    tailExtractor: async () => { entered.resolve(); return gate.promise; } });
-  const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: url } }, { cache, directory: blocked, ...localArchiveTail(cache) });
+  const cache = new VideoMediaCache({ ttlMs: 1, now: () => now, fetchImpl: async () => new Response("video") });
+  const continuity = defer();
+  const archive = archiveAttackClip({ session: { id: "test" }, clip: { index: 0, videoUrl: url } }, {
+    cache, directory: blocked, ...cloudArchiveTail, continuity: { resolveTail: continuity.resolve },
+    tailFrames: { url: () => { entered.resolve(); return gate.promise; } },
+  });
   const failed = assert.rejects(archive);
   await entered.promise; now = 10; cache.trim(); assert(cache.entries.has(url));
-  gate.resolve(new Blob(["tail"])); await failed;
+  gate.resolve(imageUrl); assert.equal(await continuity.promise, imageUrl); await failed;
+  assert(!cache.entries.has(url));
 });

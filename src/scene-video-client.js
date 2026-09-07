@@ -95,7 +95,7 @@ export class SceneAssetCache {
   }
   warm(scene, source, { skipIdle = false } = {}) {
     const key = visualSceneKey(scene);
-    const entry = this.entries.get(key) ?? { scene, source, controller: new AbortController(), idle: null, command: null, kinds: [], errors: [], failedKinds: new Set() };
+    const entry = this.entries.get(key) ?? { scene, source, controller: new AbortController(), idle: null, command: null, kinds: [], failedKinds: new Set() };
     const kinds = (skipIdle ? ["command"] : ["idle", "command"]).filter(kind => !entry.kinds.includes(kind));
     if (!kinds.length) return entry;
     entry.kinds.push(...kinds);
@@ -112,7 +112,6 @@ export class SceneAssetCache {
         this.onReady(entry, kind);
       } catch (error) {
         if (error.name !== "AbortError") {
-          entry.errors.push(error.message);
           entry.failedKinds.add(kind);
           entry.kinds = entry.kinds.filter(value => value !== kind);
         }

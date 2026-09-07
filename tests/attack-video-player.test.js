@@ -150,9 +150,10 @@ test("已 canplay 但首帧永不出现时，独立首帧截止时间有界退�
   assert(old.classes.has("is-visible")); assert(!video.classes.has("is-visible"));
 });
 
-test("fal Range-only 素材读取失败不另开 CDN 整片下载，保留旧画面", async () => {
+test("fal 共享GET素材读取失败不另开 CDN 下载，保留旧画面", async () => {
   const session = playbackSession({ id: "id", clips: [{ index: 0, videoUrl: "https://v3.fal.media/paid.mp4" }] });
-  assert.equal(session.clips[0].rangeOnly, true);
+  assert.equal(session.clips[0].sharedDownloadOnly, true);
+  assert.equal(session.clips[0].rangeOnly, undefined);
   const { player, videos, controller, events } = setup(videos => ({ protectedVideo: videos[2],
     waitForClip: async () => ({ clip: session.clips[0], session }),
   }));

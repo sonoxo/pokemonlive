@@ -17,39 +17,41 @@ function validateVideoUrl(value) {
   return url;
 }
 
-export async function downloadVideo(url, { fetchImpl = fetch, signal, maxBytes = DEFAULT_DOWNLOAD_LIMIT, onHeaders = () => {}, onChunk = () => {} } = {}) {
-  const response = await fetchImpl(validateVideoUrl(url).href, { redirect: "follow", signal });
-  if (!response.ok || !response.body) throw new Error(`VIDEO_DOWNLOAD_HTTP_${response.status}`);
-  if (response.url) validateVideoUrl(response.url);
+export async function downloadVideo(url, { fetchImpl = fetch, signal, maxBytes = DEFAULT_DOWNLOAD_LIMIT, redirect = "follow", onHeaders = () => {}, onChunk = () => {} } = {}) {
+  const response = await fetchImpl(validateVideoUrl(url).href, { redirect, signal });
   const declaredSize = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredSize) && declaredSize > maxBytes) throw new RangeError("VIDEO_DOWNLOAD_TOO_LARGE");
+  try {
+    // This helper issues a full GET, never accepts a partial 206 as a full file.
+    if (response.status !== 200 || !response.body) throw new Error(`VIDEO_DOWNLOAD_HTTP_${response.status}`);
+    if (response.url) validateVideoUrl(response.url);
+    if (Number.isFinite(declaredSize) && declaredSize > maxBytes) throw new RangeError("VIDEO_DOWNLOAD_TOO_LARGE");
+  } catch (error) { await response.body?.cancel().catch(() => {}); throw error; }
   onHeaders(Number.isSafeInteger(declaredSize) && declaredSize > 0 ? declaredSize : null, response.headers);
 
   const reader = response.body.getReader();
   const chunks = [];
   let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-      throw new RangeError("VIDEO_DOWNLOAD_TOO_LARGE");
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) throw new RangeError("VIDEO_DOWNLOAD_TOO_LARGE");
+      chunks.push(value);
+      onChunk(value);
     }
-    chunks.push(value);
-    onChunk(value);
-  }
-  if (declaredSize > 0 && total !== declaredSize) throw new Error("VIDEO_DOWNLOAD_LENGTH_MISMATCH");
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
+    if (declaredSize > 0 && total !== declaredSize) throw new Error("VIDEO_DOWNLOAD_LENGTH_MISMATCH");
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
+  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
-export function runTailFfmpeg(ffmpegPath, inputPath, outputPath, signal, inputOptions = []) {
+function runTailFfmpeg(ffmpegPath, inputPath, outputPath, signal) {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       reject(abortError());
@@ -59,7 +61,6 @@ export function runTailFfmpeg(ffmpegPath, inputPath, outputPath, signal, inputOp
       "-hide_banner",
       "-loglevel", "error",
       "-y",
-      ...inputOptions,
       "-sseof", "-1",
       "-i", inputPath,
       "-map", "0:v:0",

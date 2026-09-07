@@ -13,7 +13,7 @@ import { prefetchAttackSession } from "./attack-session-prefetch.js";
 import { clipGapMetrics } from "./cinema-gap-metrics.js";
 import { AttackVideoPlayer } from "./attack-video-player.js";
 import { createCinemaEventCursor } from "./cinema-events.js";
-import { ITEMS, MOVES, STAT_NAMES, STATUS_NAMES, TYPE_NAMES } from "./data.js";
+import { ITEMS, MOVES, STATUS_NAMES, TYPE_NAMES } from "./data.js";
 import { supportsDefaultIdleVideo } from "./idle-battle-video.js";
 import { visualScene, visualSceneKey, attackVisualScene } from "./visual-battle-state.js";
 import { requestSceneVideo, SceneAssetCache, waitForScene } from "./scene-video-client.js";

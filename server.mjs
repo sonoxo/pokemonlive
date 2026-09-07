@@ -19,7 +19,6 @@ import { downloadVideo } from "./src/video-tail-frame.js";
 import { CloudTailFrames } from "./src/cloud-tail-frame.js";
 import { loadAttackSceneAnchor, loadArchivedAttackTail, sceneAfterBeat, ATTACK_TAIL_URL_TTL_MS } from "./src/attack-scene-anchor.js";
 import { VideoMediaCache } from "./src/video-media-cache.js";
-import { supportsTailRange } from "./src/video-tail-range.js";
 import { sendLocalVideo, sendDownloadingVideo } from "./src/local-video-response.js";
 import { SpeechCache } from "./src/minimax-speech.js";
 import { buildDeepSeekMessages, normalizeCompactStoryboard } from "./src/compact-storyboard.js";
@@ -34,7 +33,7 @@ const REFERENCE_IMAGE_LIMIT = 512 * 1024;
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEFAULT_MODEL = "deepseek-v4-flash";
 const attackContinuity = new Map();
-const attackMedia = new VideoMediaCache({ extractRangeTail: false });
+const attackMedia = new VideoMediaCache();
 const attackTailFrames = new CloudTailFrames({ loadCredentials: loadFalKey,
   metricSink: metric => console.info(`[attack-tail-metric] ${JSON.stringify(metric)}`) });
 const sceneVideos = new SceneVideoService({
@@ -444,7 +443,7 @@ async function handleAttackVideoCreate(request, response) {
       const tail = new Promise(resolve => { resolveTail = resolve; });
       return { scene: sceneAfterBeat(beat, attacks), tail, resolveTail };
     });
-    attackContinuity.set(sessionId, { ...clips.at(-1), clips, attacks });
+    attackContinuity.set(sessionId, { scene: clips.at(-1).scene, clips, attacks });
     if (attackContinuity.size > 40) attackContinuity.delete(attackContinuity.keys().next().value);
     const directory = join(PROJECT_ROOT, ".local", "runs", sessionId);
     void mkdir(directory, { recursive: true })
@@ -510,9 +509,9 @@ function handleAttackVideoStatus(response, sessionId) {
 export function playbackSession(session) {
   if (!session) return session;
   return { ...session, clips: session.clips.map(clip => ({ ...clip,
-    // Range-only fal media must not open a competing browser CDN download.
+    // Attack media must not open a competing browser CDN download.
     localVideoUrl: clip.videoUrl ? `/api/attack-videos/${session.id}/clips/${clip.index}.mp4` : null,
-    rangeOnly: supportsTailRange(clip.videoUrl),
+    sharedDownloadOnly: Boolean(clip.videoUrl),
   })) };
 }
 
