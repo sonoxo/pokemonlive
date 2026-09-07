@@ -1,5 +1,9 @@
 # Third-party notices
 
+## License scope
+
+The root [MIT License](LICENSE) applies to the project's original code and original textual documentation, as described in [README.md](README.md#license). It does not relicense third-party code or media assets. All files in `assets/` and `docs/images/`, including Pokémon sprites, reference artwork, fonts, audio, generated videos, and screenshots, are outside the project's MIT grant. Third-party components and fonts retain their existing licenses; the original notices and license files below remain applicable. No Pokémon character, artwork, name, design, or trademark rights are granted.
+
 ## Fusion Pixel Font
 
 The unmodified Simplified Chinese 12px monospaced font in `assets/fonts/fusion-pixel-12px-monospaced-zh_hans.woff2` comes from [TakWolf / Fusion Pixel Font, release 2026.09.01](https://github.com/TakWolf/fusion-pixel-font/releases/tag/2026.09.01), package `fusion-pixel-font-12px-monospaced-otf.woff2-v2026.09.01.zip`. Only the filename was shortened; the font binary is unchanged.

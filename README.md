@@ -22,8 +22,8 @@
 
 </div>
 
-> [!WARNING]
-> Unofficial, local, non-commercial learning prototype. No Pokémon character license has been obtained. Opening the page can trigger paid asset prewarming; read the setup instructions and limitations before running.
+> [!NOTE]
+> Unofficial, local, non-commercial learning prototype. Read the setup instructions and limitations before running.
 
 ## Preview
 
@@ -191,8 +191,16 @@ npm test
 
 Automated tests cover rules, state continuity, generation parameters, shared downloads, cancellation, and failure recovery. Provider calls are mocked. Passing tests does not validate finished-video quality or real generation latency.
 
+## License
+
+The original source code and original textual documentation in this repository are licensed under the [MIT License](LICENSE), copyright (c) 2026 xflare-bot. This covers the project's own code in `src/`, `scripts/`, and `tests/`, its HTML, CSS, server and configuration files, and its original documentation, only to the extent that the contributors have the rights to license them.
+
+**The MIT grant does not cover media assets or third-party material.** Files in `assets/` and `docs/images/`, including sprites, reference artwork, fonts, audio, generated videos, and screenshots, are excluded from the project's MIT grant. Third-party code and other third-party material retain their respective licenses and rights; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). No Pokémon character, artwork, name, design, or trademark rights are granted by this project's code license.
+
+“Local, non-commercial learning prototype” describes this demo's purpose, not an additional restriction on MIT-licensed code. Commercial use, modification, and closed-source reuse of the covered code are permitted under MIT's terms; rights to excluded assets must be addressed separately.
+
 ## Assets and Rights
 
-This is an unofficial, local, non-commercial learning prototype, not a license to use Pokémon intellectual property. Characters, names, and imagery belong to The Pokémon Company, Nintendo, Creatures, GAME FREAK, and their respective rights holders. Non-commercial use does not automatically grant permission. Do not publicly deploy or commercially distribute this prototype.
+This is an unofficial learning prototype, not a license to use Pokémon intellectual property. Characters, names, and imagery belong to The Pokémon Company, Nintendo, Creatures, GAME FREAK, and their respective rights holders. Non-commercial use does not automatically grant permission. Obtain the necessary permissions or replace restricted assets before distributing or deploying a version that includes them; adding a code license does not resolve those asset rights.
 
 Font and image sources and license records are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Screenshots show the actual project interface, not official promotional material.
